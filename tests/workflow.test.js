@@ -40,4 +40,7 @@ test('heartbeat workflow keeps schedules active without deploying', () => {
   assert.match(text, /schedule:/);
   assert.match(text, /\.github\/heartbeat/);
   assert.match(text, /git commit/);
+  const addIndex = text.indexOf('git add .github/heartbeat');
+  const diffIndex = text.indexOf('git diff --cached --quiet');
+  assert.ok(addIndex >= 0 && diffIndex > addIndex, 'heartbeat must stage the file before checking for changes');
 });
