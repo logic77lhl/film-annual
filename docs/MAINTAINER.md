@@ -34,7 +34,9 @@ npm run serve
 
 - `dist/index.html`：线上完整版，运行时加载 `data/films.json`
 - `dist/offline.html`：离线单文件版，数据直接内联
-- `dist/data/films.json`：线上数据
+- `dist/data/films.json`：线上首屏数据，已去掉简介/演职员等详情
+- `dist/data/search.json`：演员/公司搜索索引，首屏后后台加载
+- `dist/data/details/NN.json`：32 个影片详情桶，打开影片页时按需加载
 - `dist/data/manifest.json`：数据体检结果，页面状态条也使用它
 - `dist/.nojekyll`：GitHub Pages 配置
 
@@ -155,7 +157,7 @@ push main
 ### 部署排查
 
 - **404**：确认 Pages Source 是 GitHub Actions，且最近一次 `Deploy site` 成功。
-- **页面空白**：打开开发者工具看 `data/films.json` 是否 404；线上版依赖这个文件。
+- **页面空白 / 一直显示加载中**：先强制刷新（`Ctrl+F5`）；再打开开发者工具看 `data/films.json`、`data/search.json`、`data/details/*.json` 是否 404。线上版首屏依赖 `films.json`，演员搜索和影片详情分别依赖另外两类文件。
 - **离线版空白**：确认 `dist/offline.html` 内联了 `window.__FILMS__`，并且构建时 `data/films.json` 可解析。
 - **海报不显示**：TMDB 图片被墙时，线上版会尝试 `wsrv.nl` 代理；离线版不保证海报。
 - **workflow 没有触发**：确认改动在 `main` 分支，或手动运行 `Deploy site`。

@@ -222,7 +222,9 @@ score = rating × log10(votes + 10)
 线上版：
 
 - 页面壳 + 内联 CSS/JS
-- 运行时 `fetch('data/films.json')`
+- 首屏 `fetch('data/films.json')`，只含列表/搜索基础字段
+- 演员/公司搜索索引 `data/search.json` 在首屏后后台加载
+- 影片简介、演职员等详情按 32 个桶懒加载 `data/details/NN.json`
 - 海报从 `image.tmdb.org` 加载，失败后切到 `wsrv.nl` 代理
 
 离线版：
@@ -236,6 +238,8 @@ score = rating × log10(votes + 10)
 
 - 卡片海报用 `w200`，影片页用 `w342`。
 - `loading="lazy"`。
+- 线上首屏不加载简介/演职员；影片详情按桶懒加载，避免 5 MB JSON 阻塞首页。
+- 搜索索引后台加载，首屏先用片名/导演/类型/国家可用。
 - 影史榜、搜索结果限制 60 部。
 - 图片失败显示首字色块，不显示破图。
 - 没有简介、国家、片长时显示占位，不用假数据补齐。
