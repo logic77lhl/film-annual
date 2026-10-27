@@ -8,7 +8,8 @@
   try {
     DATA = window.__FILMS__ || await (await fetch('data/films.json')).json();
   } catch (e) {
-    app.innerHTML = `<div class="notfound"><h1>数据加载失败</h1><p>请通过线上地址打开；离线阅读请用 <a href="offline.html" style="color:var(--gold)">offline.html</a>。</p></div>`;
+    console.error('Failed to load films.json', e);
+    app.innerHTML = `<div class="notfound"><h1>数据加载失败</h1><p>请通过线上地址打开；离线阅读请用 <a href="offline.html" style="color:var(--gold)">offline.html</a>。</p><p style="margin-top:14px"><a href="./?retry=1" style="color:var(--gold)">重新加载</a></p></div>`;
     return;
   }
 

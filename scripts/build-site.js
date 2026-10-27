@@ -36,6 +36,10 @@ let offline = html
 fs.rmSync('dist', { recursive: true, force: true });
 writeTextAtomic(path.join('dist', 'index.html'), full);
 writeTextAtomic(path.join('dist', 'offline.html'), offline);
+// Keep the split assets available so a cached pre-inline index.html does not
+// turn into a blank page after a deploy.
+writeTextAtomic(path.join('dist', 'app.css'), css);
+writeTextAtomic(path.join('dist', 'app.js'), js);
 writeJsonAtomic(path.join('dist', 'data', 'films.json'), data);
 writeJsonAtomic(path.join('dist', 'data', 'manifest.json'), manifest);
 writeTextAtomic(path.join('dist', '.nojekyll'), '\n');

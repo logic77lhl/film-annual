@@ -386,6 +386,9 @@ img{display:block;max-width:100%}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 
 /* misc */
+.loading{padding:96px 0;text-align:center;color:var(--muted);font-size:14px;letter-spacing:.04em}
+.loading::before{content:"";display:block;width:26px;height:26px;margin:0 auto 16px;border:2px solid var(--line2);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 .notfound{padding:90px 0;text-align:center;color:var(--dim)}
 .notfound h1{font-family:var(--serif);font-weight:500;color:var(--text);font-size:36px;margin:0 0 8px}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
