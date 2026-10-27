@@ -92,9 +92,10 @@ TMDB 需要 v3 key，只从环境变量读取：
 `github.com` 的 git 连接在当前网络不可用，发布走 `api.github.com`：
 
 - `deploy-v2.js` 读取 `gh auth token`（不打印）
-- 创建 3 个 blob：`index.html`、`offline.html`、`data/films.json`
+- 创建 5 个 blob：`index.html`、`offline.html`、`data/films.json`、`.nojekyll`、`README.md`
 - 用 Git Trees API 生成新 tree 和 commit，再更新 `main`
 - 不依赖本地 `dist/.git`，远端仓库是唯一发布源
+- 仓库只发布 `dist/` 产物和 README；构建缓存保留在本地
 
 提交后约 1 分钟，GitHub Pages 自动发布。
 
@@ -102,6 +103,6 @@ TMDB 需要 v3 key，只从环境变量读取：
 
 - 2026 年尚未结束，年度榜与华语榜会继续补。
 - IMDb 没有「制片国家」字段；国家/地区、片长、主演等来自 TMDB，冷门片可能缺失。
-- Top 30 里 722 部没有中文片名，部分没有简介和主演。
+- 全部影片里 722 部没有中文片名；部分 Top 30 影片没有简介和主演。
 - 离线版不加载海报；线上版海报来自 `image.tmdb.org`，失败时自动切到 `wsrv.nl` 代理。
 - 评分与票数为公开数据，仅供参考，不构成观看建议。
