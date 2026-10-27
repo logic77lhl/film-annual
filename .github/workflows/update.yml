@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "full = 抓取 + 构建；data-only = 只抓取和构建数据；site-only = 只重建站点"
+        description: "full = 抓取 + 构建；data-only = 只抓取和构建数据；site-only = 只校验并重建站点"
         type: choice
         options:
           - full

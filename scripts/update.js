@@ -34,7 +34,7 @@ function usage() {
 
 full       下载 IMDb、刷新 TMDB、构建数据与站点（默认）
 data-only  下载 IMDb、刷新 TMDB、构建数据，不构建站点
-site-only  只用现有缓存重建数据和站点，不发网络请求`);
+site-only  校验现有数据并重建站点，不重新生成数据、不发网络请求`);
 }
 
 async function download(url, dest) {
@@ -125,7 +125,9 @@ async function main() {
       runNode('scripts/fetch-tmdb-details.js', steps, { REFRESH: '1' });
     }
 
-    runNode('scripts/build-data.js', steps);
+    if (args.mode !== 'site-only') {
+      runNode('scripts/build-data.js', steps);
+    }
     runNode('scripts/check-data.js', steps);
 
     if (args.mode !== 'data-only') {

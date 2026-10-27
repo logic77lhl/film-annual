@@ -12,8 +12,11 @@ if (fs.existsSync('data/curated-search.json')) cache = JSON.parse(fs.readFileSyn
 const norm = s => String(s || '').toLowerCase().replace(/[《》]/g, '').replace(/[^a-z0-9\u4e00-\u9fa5]/g, '');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-const todo = unmatched.filter(x => !((x.kind + '|' + x.year + '|' + x.index) in cache));
-console.log('total', unmatched.length, 'cached', Object.keys(cache).length, 'todo', todo.length);
+const refresh = process.env.REFRESH === '1';
+const todo = refresh
+  ? [...unmatched]
+  : unmatched.filter(x => !((x.kind + '|' + x.year + '|' + x.index) in cache));
+console.log('total', unmatched.length, 'cached', Object.keys(cache).length, 'refresh', refresh, 'todo', todo.length);
 
 async function search(query, year) {
   const url = `https://api.tmdb.org/3/search/movie?query=${encodeURIComponent(query)}&language=zh-CN&include_adult=false&api_key=${key}` + (year ? `&year=${year}` : '');
