@@ -1,5 +1,6 @@
 const fs = require('fs');
 require('./_root');
+const { writeJsonAtomic } = require('./lib/fs-utils');
 const zlib = require('zlib');
 const readline = require('readline');
 
@@ -56,7 +57,7 @@ let first = true, rows = 0, hit = 0;
     if (t) out[id] = t.replace(/[（(](国语|普通话|粤语|国语版|普通话版|粤语版)[)）]\s*$/g, '').trim();
   }
 
-  fs.writeFileSync('data/cn-titles.json', JSON.stringify(out));
+  writeJsonAtomic('data/cn-titles.json', out);
   console.log('rows', rows, 'hits', hit, 'ids with cn', Object.keys(out).length);
   console.log('size KB', (fs.statSync('data/cn-titles.json').size / 1024).toFixed(0));
 })();

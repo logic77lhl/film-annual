@@ -30,14 +30,23 @@ npm run build:site
 npm run serve
 ```
 
-`npm run build:site` 读取 `data/films.json`、`app/`，生成 `dist/`：
+`npm run build:site` 读取 `data/films.json`、`data/manifest.json`、`app/`，生成 `dist/`：
 
 - `dist/index.html`：线上完整版，运行时加载 `data/films.json`
 - `dist/offline.html`：离线单文件版，数据直接内联
 - `dist/data/films.json`：线上数据
+- `dist/data/manifest.json`：数据体检结果，页面状态条也使用它
 - `dist/.nojekyll`：GitHub Pages 配置
 
 `dist/` 不提交。
+
+只跑数据体检：
+
+```bash
+npm run check
+```
+
+体检会检查年份连续性、引用完整性、重复 TMDB ID、统计口径、敏感字符等；硬错误返回非零，`data/manifest.json` 不会被覆盖。软提示（中文片名、TMDB 详情、国家缺口、当年榜单未满）只写入 manifest，不阻止发布。
 
 ## 3. 数据刷新
 
@@ -47,7 +56,7 @@ npm run serve
 npm run build:data
 ```
 
-不需要联网。它使用仓库里已提交的 `data/top30.json`、`data/cn-films.json`、`data/tmdb-*.json`、`data/curated*.json` 重新生成 `data/films.json`。
+不需要联网。它使用仓库里已提交的 `data/top30.json`、`data/cn-films.json`、`data/tmdb-*.json`、`data/curated*.json` 重新生成 `data/films.json`，然后运行 `check-data` 写入 `data/manifest.json`。
 
 ### 3.2 刷新 IMDb 年度 Top 30
 
@@ -103,7 +112,15 @@ fetch-tmdb-find → match-curated → fetch-tmdb-search
 npm run build
 ```
 
-检查输出中的统计数字是否合理，再本地打开 `dist/index.html` 和 `dist/offline.html`。
+等价的完整命令是：
+
+```bash
+node scripts/build-data.js
+node scripts/check-data.js
+node scripts/build-site.js
+```
+
+检查输出中的统计数字和 `data/manifest.json` 的 `status` / `warnings` 是否合理，再本地打开 `dist/index.html` 和 `dist/offline.html`。
 
 ### 3.6 人工层
 
@@ -122,7 +139,8 @@ npm run build
 ```text
 push main
   → .github/workflows/deploy.yml
-  → npm run build:site
+  → npm test
+  → npm run build（build-data + check-data + build-site）
   → 上传 dist/ 作为 Pages artifact
   → GitHub Pages 发布
 ```
@@ -142,34 +160,42 @@ push main
 - **海报不显示**：TMDB 图片被墙时，线上版会尝试 `wsrv.nl` 代理；离线版不保证海报。
 - **workflow 没有触发**：确认改动在 `main` 分支，或手动运行 `Deploy site`。
 
-## 5. 自动更新建议
+## 5. 自动更新
 
-目前仓库只自动部署，不自动抓数据。原因是数据刷新会改多个缓存文件，且需要 TMDB secret；建议先手动跑通一次，再开启定时任务。
+仓库使用三个 workflow：
 
-推荐节奏：
+| 文件 | 作用 | 触发 |
+| --- | --- | --- |
+| `deploy.yml` | 测试、构建、发布 Pages | push main / 手动 |
+| `update.yml` | 下载 IMDb、刷新 TMDB、构建、体检、提交 `data/`、触发部署 | 1 月 / 7 月 / 手动 |
+| `heartbeat.yml` | 每月写一次 `.github/heartbeat`，避免 60 天无活动停用 schedule | 每月 / 手动 |
 
-- 1 月 / 7 月：完整刷新
-- 每年一次：人工精选和点评
-- 每月一次：空提交或手动触发，避免 GitHub 在 60 天无活动后停用 schedule
-
-如果后续加 `update.yml`，大致流程是：
+`update.yml` 的完整流程：
 
 ```text
-schedule / workflow_dispatch
-  → 下载 IMDb 数据
-  → build-top30 + enrich-cn + refresh:cn
-  → refresh:tmdb（使用 secrets.TMDB_KEY）
-  → build
-  → 提交 data/ 变化
-  → 触发 deploy.yml
+npm test
+  → npm run update -- --mode full
+      → 下载 IMDb 三个数据集
+      → build-top30 + enrich-cn + refresh:cn
+      → refresh:tmdb（使用 secrets.TMDB_KEY）
+      → build-data + check-data + build-site
+  → 只提交 data/ 变化
+  → gh workflow run deploy.yml
 ```
+
+手动运行时 `mode` 可选：
+
+- `full`：抓取 + 构建数据 + 构建站点
+- `data-only`：抓取 + 构建数据，不构建站点
+- `site-only`：只用现有缓存重建数据和站点，不发网络请求
 
 注意：
 
 - `TMDB_KEY` 放在 **Settings → Secrets and variables → Actions**，不要放进 workflow 的明文。
 - IMDb 原始 `.tsv.gz` 不要提交，体积大且每日变化。
-- 定时 workflow 在仓库 60 天无活动后会被停用；心跳任务不能省。
-- 自动提交前先确认 `data/films.json` 的变化可接受，避免一次刷新把 2026 年的未完成榜单带偏。
+- 硬校验失败时不会提交数据，也不会触发部署；软提示会写入 `data/manifest.json` 并显示在页面顶部。
+- `data/run-summary.json` 是本次运行的步骤摘要，不提交，作为 Actions artifact 保留 14 天。
+- 如果 GitHub 仍停用了 schedule，手动运行一次 workflow 即可恢复。
 
 ## 6. 仓库约定
 
@@ -184,12 +210,10 @@ schedule / workflow_dispatch
 
 ### 2027 年数据不出现
 
-当前脚本年份上限写死在 2026。更新时把以下位置改为 2027（或改成按当前年份生成）：
+数据脚本已经从 `scripts/lib/config.js` 读取当前年份（可用 `FILM_YEAR=2027` 临时覆盖），所以 `build-top30`、`fetch-cn-films`、`build-data` 会自动覆盖新年份。还需要手动处理：
 
-- `scripts/build-top30.js`
-- `scripts/fetch-cn-films.js`
-- `scripts/build-data.js` 里的年份范围/统计
-- `app/` 里的静态文案
+- `app/` 和 README 里的静态年份文案（1895—2026、132 年）
+- 如需固定测试年份，可在本地设置 `FILM_YEAR`，但不要把它写进生产 workflow
 
 ### 某些影片没有国家、片长、主演
 

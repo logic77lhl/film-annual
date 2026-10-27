@@ -2,5 +2,8 @@ node_modules/
 dist/
 data/title.*.tsv.gz
 data/films-pretty.json
+data/run-summary.json
+data/*.download-*
+data/.*.tmp
 *.log
 .DS_Store

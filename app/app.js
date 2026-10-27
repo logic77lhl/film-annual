@@ -29,6 +29,7 @@
     countries: Object.keys(C).length,
     genres: Object.keys(G).length
   };
+  const MANIFEST = window.__MANIFEST__ || null;
 
   const titleOf = f => f.t || f.o || '未命名';
   const origOf = f => (f.o && f.t && f.o !== f.t ? f.o : '');
@@ -95,6 +96,32 @@
     clearTimeout(el._t);
     el._t = setTimeout(() => el.classList.remove('show'), 1600);
   };
+
+  const renderDataStatus = () => {
+    const box = document.getElementById('dataStatus');
+    if (!box) return;
+    if (!MANIFEST) {
+      box.hidden = true;
+      return;
+    }
+    const date = MANIFEST.dataDate || MANIFEST.generatedAt || '';
+    const warnings = Array.isArray(MANIFEST.warnings) ? MANIFEST.warnings : [];
+    const notices = Array.isArray(MANIFEST.notices) ? MANIFEST.notices : [];
+    const age = date ? Math.floor((Date.now() - new Date(date + 'T00:00:00').getTime()) / 86400000) : 0;
+    const stale = age > 300;
+    const isWarn = MANIFEST.status === 'warn' || stale;
+    const bits = [`数据构建于 ${date || '未知日期'}`];
+    if (MANIFEST.currentYearIncomplete) bits.push(`${MANIFEST.currentYear} 年数据仍在补充`);
+    else if (warnings.length) bits.push(`${warnings.length} 项提示`);
+    if (stale) bits.push('可能已过期');
+    const details = [...warnings, ...notices].map(x => x.message).filter(Boolean).join('；');
+    box.className = 'data-status' + (isWarn ? ' warn' : '');
+    box.title = details;
+    box.innerHTML = `<div class="wrap"><span class="data-dot"></span><span>${esc(bits.join(' · '))}</span>${warnings.length ? `<span class="data-note">${esc(warnings[0].message)}</span>` : ''}<a href="#/about">数据说明</a></div>`;
+    box.hidden = false;
+  };
+
+  renderDataStatus();
 
   /* ---------- my list ---------- */
   const LS_KEY = 'filmYearbook.my.v1';
@@ -702,6 +729,12 @@
 
   /* ---------- about ---------- */
   const renderAbout = () => {
+    const statusHtml = MANIFEST ? `
+        <h2>数据状态</h2>
+        <p>${esc(MANIFEST.status === 'warn' ? '有需要补充的项' : '正常')} · 数据日期 ${esc(MANIFEST.dataDate || '')}</p>
+        ${MANIFEST.warnings && MANIFEST.warnings.length ? `<ul>${MANIFEST.warnings.map(w => `<li>${esc(w.message)}</li>`).join('')}</ul>` : ''}
+        ${MANIFEST.notices && MANIFEST.notices.length ? `<p>${esc(MANIFEST.notices.map(n => n.message).join('；'))}</p>` : ''}
+    ` : '';
     app.innerHTML = `
       <header class="searchhead"><div class="kicker">ABOUT</div><h1>数据说明</h1></header>
       <section class="section prose" style="border:0">
@@ -719,6 +752,7 @@
         <p>线上版是完整的数据库；离线版是单个 HTML 文件，双击即可打开。海报不会加载，其余数据与线上版一致。地址：<a href="offline.html" style="color:var(--gold)">offline.html</a>。</p>
         <h2>数据更新</h2>
         <p>${esc(DATA.generatedAt || '')}</p>
+        ${statusHtml}
       </section>
     `;
   };

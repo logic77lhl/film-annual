@@ -1,5 +1,7 @@
 const fs = require('fs');
 require('./_root');
+const { FIRST_YEAR, CURRENT_YEAR } = require('./lib/config');
+const { writeJsonAtomic } = require('./lib/fs-utils');
 
 const key = process.env.TMDB_KEY;
 if (!key) { console.error('TMDB_KEY missing'); process.exit(1); }
@@ -37,7 +39,7 @@ async function getYear(y) {
 }
 
 (async () => {
-  for (let y = 1895; y <= 2026; y++) {
+  for (let y = FIRST_YEAR; y <= CURRENT_YEAR; y++) {
     try {
       const arr = await getYear(y);
       if (arr.length) { years[y] = arr; total += arr.length; }
@@ -46,7 +48,7 @@ async function getYear(y) {
       console.log('year', y, 'ERR', e.message);
     }
   }
-  fs.writeFileSync('data/cn-films.json', JSON.stringify({ years, total }));
+  writeJsonAtomic('data/cn-films.json', { years, total });
   console.log('years with cn films', Object.keys(years).length, 'total', total);
   console.log('size KB', (fs.statSync('data/cn-films.json').size / 1024).toFixed(0));
   for (const y of [1994, 2000, 2010, 2024]) {

@@ -12,6 +12,8 @@
      └────────────────────┴────────────────────┘
                           ↓ build-data
                     data/films.json
+                          ↓ check-data
+                  data/manifest.json
                           ↓ build-site
               dist/index.html + offline.html
 ```
@@ -67,7 +69,7 @@ TMDB 请求统一走 `https://api.tmdb.org`。key 只从环境变量 `TMDB_KEY` 
 
 - 从全部年度 Top 30 中取票数 ≥ 50,000 的影片。
 - 按 IMDb 评分降序、票数降序排序。
-- 取前 396 部，约为 4,880 部的 10%。
+- 取前约 10%（当前为 396 部）。
 - 这是“年度 Top 30 的影史子集”，不是 IMDb Top 250 的复制。
 
 ### 综合分
@@ -86,7 +88,8 @@ score = rating × log10(votes + 10)
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `generatedAt` | string | 构建时间，ISO 8601 |
+| `schemaVersion` | number | 数据结构版本，当前为 `1` |
+| `generatedAt` | string | 构建日期，`YYYY-MM-DD` |
 | `stats` | object | 影片、榜单、影人、类型、国家等计数 |
 | `films` | object | `key → 影片` 映射 |
 | `years` | object | `年份 → 年度页数据` |
@@ -144,6 +147,23 @@ score = rating × log10(votes + 10)
 
 索引里的 `films` 是影片 key 数组，前端按 key 回查 `films`，不再复制一份影片对象。
 
+### `data/manifest.json`
+
+构建后由 `check-data` 生成，是“数据体检报告”，不是数据源：
+
+| 字段 | 说明 |
+| --- | --- |
+| `status` | `ok` / `warn` / `failed` |
+| `dataDate` | 数据构建日期 |
+| `yearRange` | 覆盖的年份范围 |
+| `currentYearIncomplete` | 当年榜单是否仍在补充 |
+| `counts` / `coverage` | 影片、榜单、资料完整度计数 |
+| `warnings` | 需要关注的数据问题 |
+| `notices` | 已知的资料缺口，不阻止发布 |
+| `errors` | 硬错误；非空时不会覆盖旧 manifest |
+
+页面顶部的状态条读取这份文件：显示构建日期、当年补充状态；`warn` 时显示黄色提示。硬错误会阻止提交和部署，旧站点保持不变。
+
 ## 5. 缓存与构建顺序
 
 完整刷新：
@@ -165,11 +185,15 @@ data/unmatched.json
 data/curated-search.json
 data/core-ids.json
 data/tmdb-details.json
-        ↓ npm run build:data
+        ↓ node scripts/build-data.js
 data/films.json
+        ↓ npm run check
+data/manifest.json
         ↓ npm run build:site
 dist/
 ```
+
+`update.yml` 使用 `npm run update -- --mode full` 把上面整条链路串起来；硬校验失败会停在 `check-data`，不会提交半成品。
 
 各文件作用：
 
@@ -187,20 +211,22 @@ dist/
 | `data/curated-search.json` | 是 | 人工搜索匹配缓存 |
 | `data/core-ids.json` | 是 | 需要拉取详情的 TMDB ID |
 | `data/films.json` | 是 | 合并后的运行数据，约 5.3 MB |
+| `data/manifest.json` | 是 | 数据体检结果，页面状态条使用 |
 | `data/films-pretty.json` | 否 | 调试用格式化输出 |
+| `data/run-summary.json` | 否 | 更新流程的步骤摘要，Actions artifact |
 | `dist/` | 否 | 构建产物 |
 
 缓存提交进仓库的目的是让构建不依赖网络，并避免 TMDB 限流；不是数据源本身。
 
 ## 6. 更新节奏
 
-建议：
+仓库的 `update.yml` 已经按下面的节奏运行：
 
 - **每年 1 月和 7 月**：刷新 IMDb 数据、Top 30、华语榜、TMDB 详情。
 - **每年一次**：人工调整精选、补看和年度点评。
-- **每月一次空提交或手动触发**：防止 GitHub 在 60 天无活动后停用定时 workflow。
+- **每月一次心跳**：`heartbeat.yml` 写入提交，防止 GitHub 在 60 天无活动后停用定时 workflow。
 
-2026 年数据尚未完结；2027 年数据需要把脚本里的年份上限从 2026 改为 2027，或改为按当前年份动态生成。
+2026 年数据尚未完结。脚本从 `scripts/lib/config.js` 读取当前年份，2027 年会自动覆盖新年份；README 和前端里的静态年份文案仍需人工更新。
 
 ## 7. 已知缺口
 

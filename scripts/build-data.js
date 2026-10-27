@@ -1,5 +1,7 @@
 const fs = require('fs');
 require('./_root');
+const { FIRST_YEAR, CURRENT_YEAR } = require('./lib/config');
+const { writeJsonAtomic } = require('./lib/fs-utils');
 
 const curated = JSON.parse(fs.readFileSync('data/curated.json', 'utf8'));
 const top = JSON.parse(fs.readFileSync('data/top30.json', 'utf8'));
@@ -86,7 +88,7 @@ const ERAS = curated.eras || [
   { name: '大片时代', from: 1980, to: 1999 },
   { name: '全球化', from: 2000, to: 2009 },
   { name: '流媒体前夜', from: 2010, to: 2019 },
-  { name: '分众时代', from: 2020, to: 2026 }
+  { name: '分众时代', from: 2020, to: CURRENT_YEAR }
 ];
 const eraOf = y => (ERAS.find(e => y >= e.from && y <= e.to) || ERAS[ERAS.length - 1]).name;
 
@@ -332,7 +334,7 @@ top.allTime.forEach((x, i) => {
 
 /* 7. 年份 */
 const years = {};
-for (let y = 1895; y <= 2026; y++) {
+for (let y = FIRST_YEAR; y <= CURRENT_YEAR; y++) {
   years[y] = { era: eraOf(y), keyword: '', intro: '', comment: '', curated: [], extra: [], cn: [], top30: [] };
 }
 for (const d of curated.years) {
@@ -446,7 +448,7 @@ const stats = {
   curated: curatedCount,
   extra: extraCount,
   cn: cnCount,
-  years: 132,
+  years: Object.keys(years).length,
   directors: Object.values(people).filter(p => p.directed.length).length,
   actors: Object.values(people).filter(p => p.acted.length).length,
   countries: Object.keys(countries).length,
@@ -458,6 +460,7 @@ const stats = {
 };
 
 const out = {
+  schemaVersion: 1,
   generatedAt: new Date().toISOString().slice(0, 10),
   stats,
   films,
@@ -469,8 +472,8 @@ const out = {
 };
 
 fs.mkdirSync('data', { recursive: true });
-fs.writeFileSync('data/films.json', JSON.stringify(out));
-fs.writeFileSync('data/films-pretty.json', JSON.stringify(out, null, 1));
+writeJsonAtomic('data/films.json', out);
+writeJsonAtomic('data/films-pretty.json', out, true);
 
 console.log(stats);
 console.log('films size MB', (fs.statSync('data/films.json').size / 1024 / 1024).toFixed(2));

@@ -4,12 +4,17 @@
   "private": true,
   "description": "电影年鉴 1895—2026：年度片单、IMDb Top 30、华语片 Top 20、影史前 10%",
   "scripts": {
-    "build": "node scripts/build-data.js && node scripts/build-site.js",
-    "build:data": "node scripts/build-data.js",
+    "build": "node scripts/build-data.js && node scripts/check-data.js && node scripts/build-site.js",
+    "build:data": "node scripts/build-data.js && node scripts/check-data.js",
     "build:site": "node scripts/build-site.js",
     "build:top30": "node scripts/build-top30.js",
+    "check": "node scripts/check-data.js",
     "refresh:cn": "node scripts/fetch-cn-films.js",
     "refresh:tmdb": "node scripts/fetch-tmdb-find.js && node scripts/match-curated.js && node scripts/fetch-tmdb-search.js && node scripts/build-core-ids.js && node scripts/fetch-tmdb-details.js",
+    "update": "node scripts/update.js",
+    "update:data": "node scripts/update.js --mode data-only",
+    "update:site": "node scripts/update.js --mode site-only",
+    "test": "node --test tests/data-quality.test.js tests/update.test.js tests/workflow.test.js",
     "serve": "node scripts/serve.js"
   },
   "engines": {

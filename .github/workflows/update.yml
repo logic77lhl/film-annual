@@ -1,0 +1,93 @@
+name: Update data
+
+on:
+  schedule:
+    # 1 月 15 日 / 7 月 15 日 03:17 UTC（北京 11:17）
+    - cron: "17 3 15 1,7 *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "full = 抓取 + 构建；data-only = 只抓取和构建数据；site-only = 只重建站点"
+        type: choice
+        options:
+          - full
+          - data-only
+          - site-only
+        default: full
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
+env:
+  TZ: Asia/Shanghai
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Regression tests
+        run: npm test
+
+      # GITHUB_TOKEN 的 push 不会触发另一个 workflow，因此下面提交后
+      # 必须显式 workflow_dispatch deploy.yml。
+      - name: Run update pipeline
+        env:
+          TMDB_KEY: ${{ secrets.TMDB_KEY }}
+          MODE: ${{ inputs.mode || 'full' }}
+        run: npm run update -- --mode "$MODE"
+
+      - name: Commit data changes
+        id: commit
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          echo "changed=false" >> "$GITHUB_OUTPUT"
+          git add -A -- data
+          if git diff --cached --quiet; then
+            echo "没有新的数据变化"
+            exit 0
+          fi
+          git commit -m "data: scheduled refresh $(date -u +%F)"
+          for i in 1 2 3; do
+            if git pull --rebase --autostash --quiet origin main && git push --quiet; then
+              echo "changed=true" >> "$GITHUB_OUTPUT"
+              echo "数据已提交（第 $i 次尝试）"
+              exit 0
+            fi
+            echo "push 失败，5 秒后重试（$i/3）"
+            sleep 5
+          done
+          echo "::error::push 连续失败，请检查分支保护或并发提交"
+          exit 1
+
+      - name: Upload update summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: update-summary-${{ github.run_id }}
+          path: data/run-summary.json
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Trigger deploy
+        if: success() && (steps.commit.outputs.changed == 'true' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'site-only'))
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run deploy.yml --ref main

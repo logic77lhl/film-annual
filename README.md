@@ -28,6 +28,7 @@
 - 影片、导演、演员、类型、国家互相跳转
 - 搜索片名、原名、导演、演员、年份、类型、国家
 - 我的片单：看过 / 想看、星级、CSV 导出，保存在浏览器本地
+- 数据状态条：显示构建日期、当年补充状态和资料缺口
 - 离线单文件版，双击即可打开
 - 深色桌面 / 移动端布局
 
@@ -42,13 +43,25 @@ npm run serve
 
 打开 `http://localhost:8080`。
 
-`npm run build` 会用仓库里的数据缓存重新生成 `data/films.json`，再生成 `dist/`。不需要联网，也不需要 TMDB key。
+`npm run build` 会用仓库里的数据缓存重新生成 `data/films.json`，跑一遍数据体检并写入 `data/manifest.json`，再生成 `dist/`。不需要联网，也不需要 TMDB key。
 
 如果只想改页面：
 
 ```bash
 npm run build:site
 npm run serve
+```
+
+只跑数据体检：
+
+```bash
+npm run check
+```
+
+包含 IMDb、华语榜和 TMDB 的完整刷新需要 `TMDB_KEY`，建议直接使用统一入口：
+
+```bash
+npm run update -- --mode full
 ```
 
 ## 目录
@@ -65,10 +78,13 @@ data/                数据和抓取缓存
   cn-titles.json     中文片名
   tmdb-*.json        TMDB 缓存
   films.json         合并后的完整数据
+  manifest.json      数据体检结果与构建日期
 scripts/             数据与构建脚本
+  lib/               配置、原子写、数据体检
 docs/                设计、数据、维护文档
+tests/               Node 内置测试
 dist/                构建产物（不提交）
-.github/workflows/   部署 workflow
+.github/workflows/   部署、数据更新、定时心跳
 ```
 
 ## 数据规模
@@ -91,6 +107,14 @@ dist/                构建产物（不提交）
 - **人工精选**：`data/curated.json`，包括精选、补看、年代关键词和短评
 
 具体口径、字段和构建顺序见 [数据说明](docs/DATA.md)。
+
+## 数据更新
+
+- `.github/workflows/update.yml` 每年 1 月和 7 月自动刷新，也可手动选择 `full`、`data-only`、`site-only`。
+- 更新前先跑测试；数据构建后跑 `check-data`，硬错误会阻止提交和发布。
+- 体检结果写入 `data/manifest.json`，页面顶部显示数据日期和需要补充的项。
+- `.github/workflows/heartbeat.yml` 每月写入一次心跳，避免 GitHub 在 60 天无活动后停用定时任务。
+- `TMDB_KEY` 只放在 GitHub Actions Secrets 或本地环境变量里。
 
 ## 已知限制
 

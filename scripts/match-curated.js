@@ -1,5 +1,6 @@
 const fs = require('fs');
 require('./_root');
+const { writeJsonAtomic } = require('./lib/fs-utils');
 
 const curated = JSON.parse(fs.readFileSync('data/curated.json', 'utf8'));
 const top = JSON.parse(fs.readFileSync('data/top30.json', 'utf8'));
@@ -104,8 +105,8 @@ for (const [year, arr] of Object.entries(curated.extra)) {
 }
 
 out.stats = { curated: { top: cTop, cn: cCn, none: cNone }, extra: { top: eTop, cn: eCn, none: eNone }, unmatched: unmatched.length };
-fs.writeFileSync('data/curated-map.json', JSON.stringify(out, null, 1));
-fs.writeFileSync('data/unmatched.json', JSON.stringify(unmatched, null, 1));
+writeJsonAtomic('data/curated-map.json', out, true);
+writeJsonAtomic('data/unmatched.json', unmatched, true);
 
 console.log(out.stats);
 console.log('unmatched sample:');

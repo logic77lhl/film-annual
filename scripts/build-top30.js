@@ -3,6 +3,8 @@ require('./_root');
 const path = require('path');
 const zlib = require('zlib');
 const readline = require('readline');
+const { FIRST_YEAR, CURRENT_YEAR, ALL_TIME_RATIO } = require('./lib/config');
+const { writeJsonAtomic } = require('./lib/fs-utils');
 
 const DATA = path.join(process.cwd(), 'data');
 const OUT = path.join(process.cwd(), 'data', 'top30.json');
@@ -51,7 +53,7 @@ async function loadRatings() {
     if (adult === '1') continue;
     const y = parseInt(startY, 10);
     if (type === 'short' && y >= 1930) continue;
-    if (!(y >= 1895 && y <= 2026)) continue;
+    if (!(y >= FIRST_YEAR && y <= CURRENT_YEAR)) continue;
 
     const rt = ratings.get(id);
     if (!rt) continue;
@@ -72,18 +74,19 @@ async function loadRatings() {
   console.log('scanned:', scanned, 'kept:', kept);
 
   const years = {};
-  for (let y = 1895; y <= 2026; y++) {
+  for (let y = FIRST_YEAR; y <= CURRENT_YEAR; y++) {
     const arr = byYear.get(y) || [];
     arr.sort((a, b) => b[3] - a[3] || b[4] - a[4]);
     years[y] = arr.slice(0, 30);
   }
 
-  // 影史：所有年度 Top30 合并，票数 5 万以上的，按评分排序，取前 396（约 10%）
+  // 影史：所有年度 Top30 合并，票数 5 万以上的，按评分排序，取约 10%
   const annual = [];
   for (const y in years) for (const rec of years[y]) annual.push([parseInt(y, 10), ...rec]);
   const pool = annual.filter(x => x[5] >= 50000);
   pool.sort((a, b) => b[4] - a[4] || b[5] - a[5]);
-  const top10 = pool.slice(0, Math.min(396, pool.length));
+  const allTimeCount = Math.round(annual.length * ALL_TIME_RATIO);
+  const top10 = pool.slice(0, Math.min(allTimeCount, pool.length));
 
   const out = {
     generatedAt: new Date().toISOString(),
@@ -93,7 +96,7 @@ async function loadRatings() {
     years,
     allTime: top10
   };
-  fs.writeFileSync(OUT, JSON.stringify(out));
+  writeJsonAtomic(OUT, out);
   console.log('years:', Object.keys(years).length, 'annual:', annual.length, 'qualified:', pool.length, 'allTime:', top10.length);
   console.log('size MB:', (fs.statSync(OUT).size / 1048576).toFixed(2));
   console.log('sample 1994:', years[1994].slice(0, 5).map(x => x[1] + '|' + x[3]).join(', '));

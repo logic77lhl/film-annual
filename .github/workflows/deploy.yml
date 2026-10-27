@@ -3,6 +3,8 @@ name: Deploy site
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '.github/heartbeat'
   workflow_dispatch:
 
 permissions:
@@ -27,8 +29,11 @@ jobs:
         with:
           node-version: 22
 
-      - name: Build static site
-        run: npm run build:site
+      - name: Regression tests
+        run: npm test
+
+      - name: Build and validate
+        run: npm run build
 
       - uses: actions/configure-pages@v5
 

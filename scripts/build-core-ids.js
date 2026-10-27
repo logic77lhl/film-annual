@@ -1,5 +1,6 @@
 const fs = require('fs');
 require('./_root');
+const { writeJsonAtomic } = require('./lib/fs-utils');
 
 const curatedMap = JSON.parse(fs.readFileSync('data/curated-map.json', 'utf8'));
 const search = JSON.parse(fs.readFileSync('data/curated-search.json', 'utf8'));
@@ -16,5 +17,5 @@ for (const [k, v] of Object.entries(search)) {
 }
 
 const list = [...ids].sort((a, b) => a - b);
-fs.writeFileSync('data/core-ids.json', JSON.stringify(list));
+writeJsonAtomic('data/core-ids.json', list);
 console.log('core ids', list.length);

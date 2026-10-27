@@ -1,5 +1,6 @@
 const fs = require('fs');
 require('./_root');
+const { writeJsonAtomic } = require('./lib/fs-utils');
 
 const key = process.env.TMDB_KEY;
 if (!key) { console.error('TMDB_KEY missing'); process.exit(1); }
@@ -88,14 +89,14 @@ async function one(x) {
       try { cache[id] = await one(x); } catch (e) { cache[id] = { q: x.o || x.t, year: x.year, pick: null, alts: [], error: e.message }; }
       done++;
       if (done % 20 === 0) {
-        fs.writeFileSync('data/curated-search.json', JSON.stringify(cache));
+        writeJsonAtomic('data/curated-search.json', cache);
         console.log('progress', done, 'left', todo.length);
       }
       await sleep(120);
     }
   }
   await Promise.all(Array.from({ length: 6 }, worker));
-  fs.writeFileSync('data/curated-search.json', JSON.stringify(cache));
+  writeJsonAtomic('data/curated-search.json', cache);
   const found = Object.values(cache).filter(x => x.pick).length;
   console.log('done', done, 'found', found, 'total', Object.keys(cache).length);
   console.log('misses:');

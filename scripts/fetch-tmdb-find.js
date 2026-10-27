@@ -1,5 +1,6 @@
 const fs = require('fs');
 require('./_root');
+const { writeJsonAtomic } = require('./lib/fs-utils');
 
 const key = process.env.TMDB_KEY;
 if (!key) { console.error('TMDB_KEY missing'); process.exit(1); }
@@ -57,7 +58,7 @@ async function worker() {
     done++;
     if (res) ok++;
     if (done % 100 === 0) {
-      fs.writeFileSync('data/tmdb-find2.json', JSON.stringify(cache));
+      writeJsonAtomic('data/tmdb-find2.json', cache);
       console.log('progress', done, 'ok', ok, 'left', todo.length);
     }
     await sleep(50);
@@ -66,7 +67,7 @@ async function worker() {
 
 (async () => {
   await Promise.all(Array.from({ length: 8 }, worker));
-  fs.writeFileSync('data/tmdb-find2.json', JSON.stringify(cache));
+  writeJsonAtomic('data/tmdb-find2.json', cache);
   console.log('done', done, 'ok', ok, 'total', Object.keys(cache).length);
   console.log('size KB', (fs.statSync('data/tmdb-find2.json').size / 1024).toFixed(0));
 })();
