@@ -1,0 +1,19 @@
+{
+  "name": "film-annual",
+  "version": "2.0.0",
+  "private": true,
+  "description": "电影年鉴 1895—2026：年度片单、IMDb Top 30、华语片 Top 20、影史前 10%",
+  "scripts": {
+    "build": "node scripts/build-data.js && node scripts/build-site.js",
+    "build:data": "node scripts/build-data.js",
+    "build:site": "node scripts/build-site.js",
+    "build:top30": "node scripts/build-top30.js",
+    "refresh:cn": "node scripts/fetch-cn-films.js",
+    "refresh:tmdb": "node scripts/fetch-tmdb-find.js && node scripts/match-curated.js && node scripts/fetch-tmdb-search.js && node scripts/build-core-ids.js && node scripts/fetch-tmdb-details.js",
+    "serve": "node scripts/serve.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,6 @@
+node_modules/
+dist/
+data/title.*.tsv.gz
+data/films-pretty.json
+*.log
+.DS_Store

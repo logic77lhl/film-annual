@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>电影年鉴 1895—2026 · 电影元数据库</title>
+<meta name="description" content="从 1895 到 2026 的电影年鉴：132 年片单、IMDb 年度 Top 30、华语片 Top 20、影史前 10%，以及影片、导演、类型、国家索引。">
+<meta name="theme-color" content="#09090b">
+<meta property="og:title" content="电影年鉴 1895—2026 · 电影元数据库">
+<meta property="og:description" content="132 年，每年精选 + 华语 20 + 全球 Top 30；可按影片、导演、类型、国家浏览。">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2309090b'/%3E%3Ccircle cx='32' cy='32' r='15' fill='none' stroke='%23d4b176' stroke-width='4'/%3E%3Ccircle cx='32' cy='32' r='4' fill='%23d4b176'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap topin">
+    <a class="brand" href="#/">电影年鉴 <span>1895—2026</span></a>
+    <nav class="nav" id="nav">
+      <a href="#/">首页</a>
+      <a href="#/all">影史</a>
+      <a href="#/search">影片</a>
+      <a href="#/people">导演</a>
+      <a href="#/genres">类型</a>
+      <a href="#/countries">国家</a>
+      <a href="#/list">我的</a>
+    </nav>
+    <form class="search" id="searchForm" role="search">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="searchInput" type="search" placeholder="搜片名、导演、演员、年份…" autocomplete="off">
+    </form>
+    <button class="menu" id="menuBtn" aria-label="菜单">☰</button>
+  </div>
+</header>
+
+<main id="app" class="wrap"></main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p>数据：IMDb 每日数据集 + TMDB · 评分与票数为公开数据，仅供参考 · 不构成观看建议</p>
+    <p><a href="#/about">数据说明</a> · <a href="offline.html" id="offlineLink">离线单文件版</a> · <a href="https://github.com/logic77lhl/film-annual" target="_blank" rel="noopener">GitHub</a></p>
+  </div>
+</footer>
+
+<div id="toast" class="toast" role="status"></div>
+<noscript><div class="wrap" style="padding:40px 0;color:#8d94a1">这个页面需要 JavaScript。请换一个浏览器，或在设置里允许 JavaScript。</div></noscript>
+<script src="app.js"></script>
+</body>
+</html>

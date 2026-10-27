@@ -1,0 +1,857 @@
+(async function () {
+  const app = document.getElementById('app');
+  const $ = (s, el = document) => el.querySelector(s);
+  const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  let DATA;
+  try {
+    DATA = window.__FILMS__ || await (await fetch('data/films.json')).json();
+  } catch (e) {
+    app.innerHTML = `<div class="notfound"><h1>数据加载失败</h1><p>请通过线上地址打开；离线阅读请用 <a href="offline.html" style="color:var(--gold)">offline.html</a>。</p></div>`;
+    return;
+  }
+
+  const F = DATA.films || {};
+  const P = DATA.people || {};
+  const G = DATA.genres || {};
+  const C = DATA.countries || {};
+  const Y = DATA.years || {};
+  const ALL = DATA.allTime || [];
+  const STATS = DATA.stats || {
+    films: Object.keys(F).length,
+    top30: 0,
+    curated: 0,
+    cn: 0,
+    years: Object.keys(Y).length,
+    directors: 0,
+    actors: 0,
+    countries: Object.keys(C).length,
+    genres: Object.keys(G).length
+  };
+
+  const titleOf = f => f.t || f.o || '未命名';
+  const origOf = f => (f.o && f.t && f.o !== f.t ? f.o : '');
+  const ratingOf = f => Number(f.r || f.tr || 0);
+  const votesOf = f => Number(f.v || f.tv || 0);
+  const weighted = f => {
+    const r = ratingOf(f), v = votesOf(f);
+    return r ? r * Math.log10((v || 0) + 10) : 0;
+  };
+  const fmtVotes = v => {
+    v = Number(v || 0);
+    if (v >= 10000) return (v / 10000).toFixed(v >= 100000 ? 0 : 1) + '万';
+    if (v >= 1000) return (v / 1000).toFixed(1) + 'k';
+    return String(v);
+  };
+  const fmtNum = n => Number(n || 0).toLocaleString('zh-CN');
+  const fmtRuntime = m => {
+    m = Number(m || 0);
+    if (!m) return '';
+    const h = Math.floor(m / 60), r = m % 60;
+    return h ? `${h}h${r ? ' ' + r + 'm' : ''}` : `${r}m`;
+  };
+  const genreName = id => G[id]?.name || '';
+  const countryName = c => C[c]?.name || c;
+  const genreNames = f => (f.genres || []).map(genreName).filter(Boolean);
+  const countryNames = f => (f.countries || []).map(countryName).filter(Boolean);
+  const isChinese = f => !!(f.cnRank || ['zh', 'cn', 'yue'].includes(f.lang) || (f.countries || []).some(c => ['CN', 'HK', 'TW', 'MO', 'SG'].includes(c)));
+  const filmHref = key => '#/film/' + encodeURIComponent(key);
+  const personHref = name => '#/person/' + encodeURIComponent(name);
+  const yearHref = y => '#/year/' + y;
+
+  const posterHtml = (f, size = 'w200', cls = '') => {
+    const t = titleOf(f);
+    const ph = `<span class="ph-t">${esc(t.slice(0, 1))}</span>`;
+    if (!f.p) return `<div class="poster ph ${cls}">${ph}</div>`;
+    return `<div class="poster ${cls}">${ph}<img loading="lazy" src="https://image.tmdb.org/t/p/${size}${f.p}" alt="${esc(t)}" data-poster="${esc(f.p)}" onerror="if(!this.dataset.x){this.dataset.x=1;this.src='https://wsrv.nl/?url='+encodeURIComponent('image.tmdb.org/t/p/${size}'+this.dataset.poster)}else{this.style.display='none'}"></div>`;
+  };
+
+  const filmCard = (key, opts = {}) => {
+    const f = F[key];
+    if (!f) return '';
+    const rank = opts.rank ? `<span class="prank">${opts.rank}</span>` : '';
+    const sub = opts.sub || [f.year, countryNames(f)[0]].filter(Boolean).join(' · ');
+    const r = opts.tmdb ? (f.tr || f.r) : ratingOf(f);
+    const v = opts.tmdb ? (f.tv || f.v) : votesOf(f);
+    return `<a class="card" href="${filmHref(key)}">
+      ${rank}${posterHtml(f)}
+      <div class="pbody">
+        <div class="ptitle">${esc(titleOf(f))}</div>
+        <div class="pmeta">${esc(sub)}</div>
+        <div class="prate"><b>${r ? Number(r).toFixed(1) : '—'}</b><span>${v ? fmtVotes(v) : ''}</span></div>
+      </div>
+    </a>`;
+  };
+
+  const sectionHead = (title, small = '', link = '', linkText = '查看全部') => `<div class="section-head"><h2>${esc(title)}</h2><i class="line"></i>${small ? `<small>${esc(small)}</small>` : ''}${link ? `<a href="${link}">${esc(linkText)}</a>` : ''}</div>`;
+
+  const notfound = (msg = '没找到这一页') => `<div class="notfound"><h1>404</h1><p>${esc(msg)}</p><p style="margin-top:14px"><a href="#/" style="color:var(--gold)">回首页</a></p></div>`;
+
+  const toast = msg => {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.remove('show'), 1600);
+  };
+
+  /* ---------- my list ---------- */
+  const LS_KEY = 'filmYearbook.my.v1';
+  const getMy = () => {
+    try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}') || {}; } catch (e) { return {}; }
+  };
+  const setMy = (key, patch) => {
+    const m = getMy();
+    m[key] = { ...(m[key] || {}), ...patch, at: Date.now() };
+    localStorage.setItem(LS_KEY, JSON.stringify(m));
+  };
+  const delMy = key => {
+    const m = getMy();
+    delete m[key];
+    localStorage.setItem(LS_KEY, JSON.stringify(m));
+  };
+  const myStatusLabel = s => s === 'watched' ? '看过' : s === 'want' ? '想看' : '';
+
+  /* ---------- routing ---------- */
+  const parseHash = () => {
+    const h = location.hash || '#/';
+    const raw = h.slice(1);
+    const qi = raw.indexOf('?');
+    const path = qi >= 0 ? raw.slice(0, qi) : raw;
+    const qs = qi >= 0 ? raw.slice(qi + 1) : '';
+    const parts = path.split('/').filter(Boolean).map(p => {
+      try { return decodeURIComponent(p); } catch (e) { return p; }
+    });
+    return { parts, params: new URLSearchParams(qs) };
+  };
+
+  const setActive = parts => {
+    const root = parts[0] || 'home';
+    const map = {
+      home: '#/', all: '#/all', search: '#/search', film: '#/search',
+      people: '#/people', person: '#/people',
+      genres: '#/genres', genre: '#/genres',
+      countries: '#/countries', country: '#/countries',
+      list: '#/list'
+    };
+    const target = map[root] || '';
+    $$('#nav a').forEach(a => a.classList.toggle('on', a.getAttribute('href') === target));
+  };
+
+  /* ---------- home ---------- */
+  const renderHome = () => {
+    const topGenres = Object.values(G).sort((a, b) => b.count - a.count).slice(0, 14);
+    const topCountries = Object.values(C).sort((a, b) => b.count - a.count).slice(0, 14);
+    const directors = Object.values(P)
+      .filter(p => (p.directed || []).length >= 2)
+      .sort((a, b) => (b.avg || 0) - (a.avg || 0) || b.count - a.count)
+      .slice(0, 8);
+    const picks = Object.entries(F)
+      .filter(([, f]) => f.curated)
+      .sort((a, b) => weighted(b[1]) - weighted(a[1]))
+      .slice(0, 7);
+    const years = Object.keys(Y).map(Number).sort((a, b) => a - b);
+    const decades = {};
+    years.forEach(y => { const d = Math.floor(y / 10) * 10; (decades[d] = decades[d] || []).push(y); });
+
+    app.innerHTML = `
+      <section class="hero">
+        <div class="kicker">A FILM A YEAR · 1895—2026</div>
+        <h1>一百三十二年，<br>每年留<em>几部片</em>。</h1>
+        <p>从卢米埃尔兄弟在巴黎地下室卖出的第一张票，到今年的《奥德赛》。132 份年度影单，加上 IMDb 年度 Top 30、华语片 Top 20、影史前 10%。现在也可以按影片、导演、类型、国家逛。</p>
+        <form class="searchbig" id="heroSearch" style="margin-top:24px">
+          <input name="q" placeholder="搜片名、导演、演员、年份、类型…" autocomplete="off">
+          <button type="submit">搜索</button>
+        </form>
+      </section>
+
+      <div class="stats">
+        <div class="stat"><b>${fmtNum(STATS.films || Object.keys(F).length)}</b><span>FILMS</span></div>
+        <div class="stat"><b>${fmtNum(STATS.directors || 0)}</b><span>DIRECTORS</span></div>
+        <div class="stat"><b>${fmtNum(STATS.actors || 0)}</b><span>ACTORS</span></div>
+        <div class="stat"><b>${fmtNum(STATS.countries || Object.keys(C).length)}</b><span>COUNTRIES</span></div>
+        <div class="stat"><b>${fmtNum(STATS.genres || Object.keys(G).length)}</b><span>GENRES</span></div>
+        <div class="stat gold"><b>${fmtNum(STATS.cn || 0)}</b><span>华语片</span></div>
+      </div>
+
+      <section class="section">
+        ${sectionHead('编辑精选', '从 132 年里挑出来的', '#/search', '去片库')}
+        <div class="poster-grid">${picks.map(([k]) => filmCard(k)).join('')}</div>
+      </section>
+
+      <section class="section">
+        ${sectionHead('按类型', '点进去看这类片', '#/genres', '全部类型')}
+        <div class="chips">${topGenres.map(g => `<a class="chip" href="#/genre/${g.id}">${esc(g.name)}<small>${fmtNum(g.count)}</small></a>`).join('')}</div>
+      </section>
+
+      <section class="section">
+        ${sectionHead('按国家', '按制片国家/地区', '#/countries', '全部国家')}
+        <div class="chips">${topCountries.map(c => `<a class="chip" href="#/country/${encodeURIComponent(c.code)}">${esc(c.name)}<small>${fmtNum(c.count)}</small></a>`).join('')}</div>
+      </section>
+
+      <section class="section">
+        ${sectionHead('精选导演', '按收录作品平均分', '#/people', '导演索引')}
+        <div class="entity-grid">
+          ${directors.map(p => `<a class="entity" href="${personHref(p.name)}"><b>${esc(p.name)}</b><span>${(p.directed || []).length} 部<em>${p.avg ? p.avg.toFixed(1) : '—'}</em></span></a>`).join('')}
+        </div>
+      </section>
+
+      <section class="section">
+        ${sectionHead('年份', '1895—2026 · 按十年分组', '#/all', '影史 Top 10%')}
+        ${Object.keys(decades).sort((a, b) => a - b).map(d => `
+          <div class="decade-block">
+            <h3>${d}s <span>${decades[d].length} YEARS</span></h3>
+            <div class="year-grid">
+              ${decades[d].map(y => {
+                const m = Y[y] || {};
+                const n = new Set([...(m.curated || []), ...(m.extra || []), ...(m.cn || []), ...(m.top30 || [])]).size;
+                return `<a class="ycard" href="${yearHref(y)}"><span class="yn">${y}</span><span class="yk">${esc(m.keyword || '')}</span><span class="ym">${n} 部</span></a>`;
+              }).join('')}
+            </div>
+          </div>`).join('')}
+      </section>
+    `;
+  };
+
+  /* ---------- year ---------- */
+  const rankRow = (key, rank, opts = {}) => {
+    const f = F[key];
+    if (!f) return '';
+    const r = opts.tmdb ? (f.tr || f.r) : (f.r || f.tr);
+    const v = opts.tmdb ? (f.tv || f.v) : (f.v || f.tv);
+    return `<a class="rk" href="${filmHref(key)}">
+      <span class="rkno">${String(rank).padStart(2, '0')}</span>
+      <span class="rkt">${opts.pick ? '<span class="pick">精选</span>' : ''}${esc(titleOf(f))}${origOf(f) ? `<i>${esc(origOf(f))}</i>` : ''}</span>
+      <span class="rky">${v ? fmtVotes(v) : ''}</span>
+      <span class="rkr">${r ? Number(r).toFixed(1) : '—'}</span>
+    </a>`;
+  };
+
+  const renderYear = year => {
+    const m = Y[year];
+    if (!m) return notfound('这一年还没有条目');
+    const curated = (m.curated || []).map(k => [k, F[k]]).filter(x => x[1]);
+    const extra = (m.extra || []).map(k => [k, F[k]]).filter(x => x[1]);
+    const cn = (m.cn || []).map(k => [k, F[k]]).filter(x => x[1]);
+    const top = (m.top30 || []).map(k => [k, F[k]]).filter(x => x[1]);
+    const all = [...new Set([...curated, ...extra, ...cn, ...top].map(x => x[0]))].map(k => F[k]);
+    const rated = all.map(ratingOf).filter(Boolean);
+    const avg = rated.length ? rated.reduce((a, b) => a + b, 0) / rated.length : 0;
+    const yrs = Object.keys(Y).map(Number).sort((a, b) => a - b);
+    const idx = yrs.indexOf(Number(year));
+    const prev = idx > 0 ? yrs[idx - 1] : null;
+    const next = idx >= 0 && idx < yrs.length - 1 ? yrs[idx + 1] : null;
+    const best = [...curated].sort((a, b) => ratingOf(b[1]) - ratingOf(a[1]))[0]?.[0];
+
+    app.innerHTML = `
+      <button class="back" data-back data-to="#/">← 返回年表</button>
+      <header class="yearhead">
+        <div class="dyear">${year}</div>
+        <div class="dkey">${esc(m.era || '')} · ${esc(m.keyword || '')}</div>
+        <h1>${year} 年，值得先看的 ${curated.length} 部</h1>
+        <p class="dintro">${esc(m.intro || '')}</p>
+        <div class="dtags">
+          <span class="dtag">${fmtNum(all.length)} 部收录</span>
+          <span class="dtag">平均 ${avg ? avg.toFixed(1) : '—'}</span>
+          ${cn.length ? `<span class="dtag">华语 ${cn.length}</span>` : ''}
+          ${top.length ? `<span class="dtag">IMDb Top ${top.length}</span>` : ''}
+        </div>
+      </header>
+
+      ${curated.length ? `<section class="section">
+        ${sectionHead('THE LIST', '年度精选')}
+        ${curated.map(([k, f]) => {
+          const dir = f.curated?.director || (f.directors || []).join(' / ');
+          const cty = f.curated?.country || countryNames(f).join(' / ');
+          return `<a class="frow" href="${filmHref(k)}">
+            ${posterHtml(f, 'w200')}
+            <div>
+              <div class="frow-t">${k === best ? '<span class="pick">年度之选</span>' : ''}${esc(titleOf(f))}${origOf(f) ? `<span>${esc(origOf(f))}</span>` : ''}</div>
+              <div class="frow-m">${esc([dir, cty, genreNames(f).slice(0, 2).join(' / ')].filter(Boolean).join(' · '))}</div>
+              ${f.curated?.note ? `<p class="frow-n">${esc(f.curated.note)}</p>` : ''}
+            </div>
+          </a>`;
+        }).join('')}
+      </section>` : ''}
+
+      ${extra.length ? `<section class="section">
+        ${sectionHead('ALSO WORTH A LOOK', '补看')}
+        <div class="more">
+          ${extra.map(([k, f], i) => `<a class="mrow" href="${filmHref(k)}">
+            <span class="n">${String(i + 1).padStart(2, '0')}</span>
+            <span><b>${esc(titleOf(f))}</b>${origOf(f) ? `<i>${esc(origOf(f))}</i>` : ''}<small>${esc([f.extra?.director || f.curated?.director || (f.directors || []).join(' / '), f.extra?.country || f.curated?.country || countryNames(f).join(' / ')].filter(Boolean).join(' · '))}</small></span>
+          </a>`).join('')}
+        </div>
+      </section>` : ''}
+
+      ${cn.length ? `<section class="section">
+        ${sectionHead('CHINESE CINEMA', `${cn.length} 部 · TMDB`, '#/search?cn=1', '只看华语')}
+        <div class="ranklist">
+          <div class="rk rkhead"><span></span><span>片名</span><span>票数</span><span>评分</span></div>
+          ${cn.map(([k], i) => rankRow(k, F[k]?.cnRank || i + 1, { tmdb: true })).join('')}
+        </div>
+        <p class="rknote">华语片榜来自 TMDB（普通话 + 粤语），按评分排序、同分看票数；票数门槛 30。</p>
+      </section>` : ''}
+
+      ${top.length ? `<section class="section">
+        ${sectionHead('YEAR TOP 30', `${top.length} 部 · IMDb`, '#/all', '影史榜')}
+        <div class="ranklist">
+          <div class="rk rkhead"><span></span><span>片名</span><span>票数</span><span>评分</span></div>
+          ${top.map(([k], i) => rankRow(k, F[k]?.top30Rank || i + 1)).join('')}
+        </div>
+        <p class="rknote">Top 30 来自 IMDb 每日数据集，按评分排序、同分看票数；没有对应中文名的影片保留原名。</p>
+      </section>` : ''}
+
+      ${m.comment ? `<div class="comment"><h3>点评</h3><p>${esc(m.comment)}</p></div>` : ''}
+
+      <div class="pager">
+        ${prev ? `<button data-go="${prev}"><small>上一年</small><b>${prev} · ${esc(Y[prev]?.keyword || '')}</b></button>` : '<span></span>'}
+        ${next ? `<button class="next" data-go="${next}"><small>下一年</small><b>${next} · ${esc(Y[next]?.keyword || '')}</b></button>` : '<span></span>'}
+      </div>
+    `;
+  };
+
+  /* ---------- film ---------- */
+  const relatedSection = (title, keys) => {
+    const list = [...new Set(keys)].filter(k => F[k]).slice(0, 6);
+    if (!list.length) return '';
+    return `<section class="section">${sectionHead(title, '', '#/search', '去片库')}<div class="poster-grid">${list.map(k => filmCard(k)).join('')}</div></section>`;
+  };
+
+  const renderFilm = key => {
+    const f = F[key];
+    if (!f) return notfound('这部片还没有收录');
+    const my = getMy()[key] || {};
+    const dirs = f.directors || (f.curated?.director ? [f.curated.director] : (f.extra?.director ? [f.extra.director] : []));
+    const cast = (f.cast || []).slice(0, 6);
+    const year = f.year || 0;
+    const r = f.r || 0, tr = f.tr || 0;
+    const lists = [];
+    if (year) lists.push(`<a class="chip" href="${yearHref(year)}">${year} 年</a>`);
+    if (f.top30Rank) lists.push(`<a class="chip" href="${yearHref(year)}">IMDb Top 30 · #${f.top30Rank}</a>`);
+    if (f.cnRank) lists.push(`<a class="chip" href="${yearHref(year)}">华语 Top 20 · #${f.cnRank}</a>`);
+    if (f.allTimeRank) lists.push(`<a class="chip" href="#/all">影史前 10% · #${f.allTimeRank}</a>`);
+    if (f.curated) lists.push(`<span class="chip">年度精选</span>`);
+    if (f.curated?.year && f.curated.year !== year) lists.push(`<a class="chip" href="${yearHref(f.curated.year)}">${f.curated.year} 年精选</a>`);
+    if (f.extra) lists.push(`<span class="chip">补看</span>`);
+    if (f.extra?.year && f.extra.year !== year) lists.push(`<a class="chip" href="${yearHref(f.extra.year)}">${f.extra.year} 年补看</a>`);
+
+    const sameDir = dirs[0] ? (P[dirs[0]]?.directed || []).filter(k => k !== key) : [];
+    const sameGenre = f.genres?.[0] ? (G[f.genres[0]]?.films || []).filter(k => k !== key && F[k]).sort((a, b) => weighted(F[b]) - weighted(F[a])).slice(0, 8) : [];
+    const sameCountry = f.countries?.[0] ? (C[f.countries[0]]?.films || []).filter(k => k !== key && F[k]).sort((a, b) => weighted(F[b]) - weighted(F[a])).slice(0, 8) : [];
+    const sameCollection = f.collection?.id ? Object.keys(F).filter(k => k !== key && F[k].collection?.id === f.collection.id).sort((a, b) => (F[a].year || 0) - (F[b].year || 0)).slice(0, 8) : [];
+
+    app.innerHTML = `
+      <button class="back" data-back data-to="${year ? yearHref(year) : '#/'}">← ${year ? year + ' 年' : '返回'}</button>
+      <div class="filmhero">
+        ${posterHtml(f, 'w342', 'fposter')}
+        <div class="finfo">
+          <div class="kicker">FILM · ${year || ''}</div>
+          <h1>${esc(titleOf(f))}</h1>
+          ${origOf(f) ? `<p class="forig">${esc(origOf(f))}</p>` : ''}
+          <div class="fmeta">
+            ${year ? `<span>${year}</span>` : ''}
+            ${countryNames(f).length ? `<span>${esc(countryNames(f).join(' / '))}</span>` : ''}
+            ${genreNames(f).length ? `<span>${esc(genreNames(f).join(' / '))}</span>` : ''}
+            ${f.runtime ? `<span>${fmtRuntime(f.runtime)}</span>` : ''}
+            ${f.rd ? `<span>${esc(f.rd)}</span>` : ''}
+          </div>
+          <div class="frating">
+            ${r ? `<div class="fr"><b>${Number(r).toFixed(1)}</b><span>IMDb</span><small>${fmtVotes(f.v)}</small></div>` : ''}
+            ${tr ? `<div class="fr"><b>${Number(tr).toFixed(1)}</b><span>TMDB</span><small>${fmtVotes(f.tv)}</small></div>` : ''}
+            ${!r && !tr ? `<span style="color:var(--dim);font-size:12px">暂无评分</span>` : ''}
+          </div>
+          <div class="factions">
+            <button class="fbtn ${my.status === 'watched' ? 'on' : ''}" data-my="watched" data-key="${esc(key)}">看过</button>
+            <button class="fbtn ${my.status === 'want' ? 'on' : ''}" data-my="want" data-key="${esc(key)}">想看</button>
+            <div class="stars">${[1, 2, 3, 4, 5].map(n => `<button class="${(my.rating || 0) >= n ? 'on' : ''}" data-star="${n}" data-key="${esc(key)}" aria-label="${n} 星">★</button>`).join('')}</div>
+          </div>
+          <div class="credits">
+            ${dirs.length ? `<div><b>导演</b>${dirs.map(d => `<a href="${personHref(d)}">${esc(d)}</a>`).join(' / ')}</div>` : ''}
+            ${cast.length ? `<div><b>主演</b>${cast.map(c => P[c.n] ? `<a href="${personHref(c.n)}">${esc(c.n)}</a>` : esc(c.n)).join(' / ')}</div>` : ''}
+            ${(f.companies || []).length ? `<div><b>出品</b>${f.companies.map(esc).join(' / ')}</div>` : ''}
+          </div>
+        </div>
+      </div>
+
+      <section class="prose">
+        <h2>简介</h2>
+        <p>${esc(f.overview || 'TMDB 暂无中文简介。')}</p>
+      </section>
+
+      ${f.curated?.note ? `<div class="comment"><h3>年鉴点评</h3><p>${esc(f.curated.note)}</p></div>` : ''}
+
+      <section class="lists">
+        <h2 class="sr">收录于</h2>
+        <div class="chips">${lists.join('')}</div>
+      </section>
+
+      ${sameCollection.length ? relatedSection('同系列', sameCollection) : ''}
+      ${sameDir.length ? relatedSection('同导演', sameDir) : ''}
+      ${sameGenre.length ? relatedSection('同类型', sameGenre) : ''}
+      ${sameCountry.length ? relatedSection('同国家', sameCountry) : ''}
+
+      <div class="links">
+        <a href="https://search.douban.com/movie/subject_search?search_text=${encodeURIComponent((f.o || f.t || '').replace(/[《》]/g, ''))}" target="_blank" rel="noopener">豆瓣搜索</a>
+        ${f.imdb ? `<a href="https://www.imdb.com/title/${f.imdb}/" target="_blank" rel="noopener">IMDb</a>` : ''}
+        ${f.tmdb ? `<a href="https://www.themoviedb.org/movie/${f.tmdb}" target="_blank" rel="noopener">TMDB</a>` : ''}
+      </div>
+    `;
+  };
+
+  /* ---------- person ---------- */
+  const renderPerson = name => {
+    let p = P[name];
+    if (!p) {
+      const found = Object.keys(P).find(k => k.toLowerCase() === String(name).toLowerCase());
+      if (found) p = P[found];
+    }
+    if (!p) return notfound('没有这位影人的条目');
+    const directed = (p.directed || []).map(k => [k, F[k]]).filter(x => x[1]).sort((a, b) => (b[1].year || 0) - (a[1].year || 0));
+    const acted = (p.acted || []).map(k => [k, F[k]]).filter(x => x[1]).sort((a, b) => (b[1].year || 0) - (a[1].year || 0));
+    const role = p.role || (directed.length && acted.length ? '导演 / 演员' : directed.length ? '导演' : '演员');
+    const works = directed.length ? directed : acted;
+    const avg = works.length ? works.reduce((s, [, f]) => s + ratingOf(f), 0) / works.filter(([, f]) => ratingOf(f)).length : 0;
+
+    app.innerHTML = `
+      <button class="back" data-back data-to="#/people">← 影人索引</button>
+      <header class="personhead">
+        <div class="role">${esc(role)}</div>
+        <h1>${esc(p.name)}</h1>
+        <div class="personstats">
+          <div><b>${p.count || works.length}</b><span>收录作品</span></div>
+          <div><b>${Number.isFinite(avg) && avg ? avg.toFixed(1) : '—'}</b><span>平均评分</span></div>
+          <div><b>${p.from || '—'}—${p.to || '—'}</b><span>年份跨度</span></div>
+        </div>
+      </header>
+      ${directed.length ? `<section class="section">${sectionHead('导演作品', `${directed.length} 部`, '#/people', '导演索引')}<div class="poster-grid">${directed.map(([k]) => filmCard(k)).join('')}</div></section>` : ''}
+      ${acted.length ? `<section class="section">${sectionHead('出演', `${acted.length} 部`, '#/people?role=actor', '演员索引')}<div class="poster-grid">${acted.map(([k]) => filmCard(k)).join('')}</div></section>` : ''}
+      ${!directed.length && !acted.length ? `<div class="empty">这位影人还没有关联作品。</div>` : ''}
+    `;
+  };
+
+  /* ---------- entity pages ---------- */
+  const renderGenre = id => {
+    const g = G[id];
+    if (!g) return notfound('没有这个类型');
+    const films = (g.films || []).map(k => F[k]).filter(Boolean);
+    const rated = films.map(ratingOf).filter(Boolean);
+    const avg = rated.length ? rated.reduce((a, b) => a + b, 0) / rated.length : 0;
+    const top = (g.films || []).map(k => [k, F[k]]).filter(x => x[1]).sort((a, b) => weighted(b[1]) - weighted(a[1])).slice(0, 60);
+    const decades = {};
+    films.forEach(f => { const d = Math.floor((f.year || 0) / 10) * 10; if (d) (decades[d] = decades[d] || []).push(f); });
+    app.innerHTML = `
+      <button class="back" data-back data-to="#/genres">← 类型索引</button>
+      <header class="personhead">
+        <div class="role">GENRE</div>
+        <h1>${esc(g.name)}</h1>
+        <div class="personstats">
+          <div><b>${fmtNum(g.count || films.length)}</b><span>收录作品</span></div>
+          <div><b>${avg ? avg.toFixed(1) : '—'}</b><span>平均评分</span></div>
+          <div><b>${Object.keys(decades).length}</b><span>覆盖年代</span></div>
+        </div>
+      </header>
+      <section class="section">
+        ${sectionHead('年代分布', '', '#/search?genre=' + g.id, '去搜索')}
+        <div class="chips">${Object.keys(decades).sort((a, b) => a - b).map(d => `<span class="chip">${d}s<small>${decades[d].length}</small></span>`).join('')}</div>
+      </section>
+      <section class="section">
+        ${sectionHead('综合高分', `前 ${top.length} 部`, '#/search?genre=' + g.id, '看全部')}
+        <div class="poster-grid">${top.map(([k], i) => filmCard(k, { rank: i + 1 })).join('')}</div>
+      </section>
+    `;
+  };
+
+  const renderCountry = code => {
+    const c = C[code];
+    if (!c) return notfound('没有这个国家/地区');
+    const films = (c.films || []).map(k => F[k]).filter(Boolean);
+    const rated = films.map(ratingOf).filter(Boolean);
+    const avg = rated.length ? rated.reduce((a, b) => a + b, 0) / rated.length : 0;
+    const top = (c.films || []).map(k => [k, F[k]]).filter(x => x[1]).sort((a, b) => weighted(b[1]) - weighted(a[1])).slice(0, 60);
+    const dirCount = {};
+    films.forEach(f => (f.directors || []).forEach(d => { dirCount[d] = (dirCount[d] || 0) + 1; }));
+    const dirs = Object.entries(dirCount).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    app.innerHTML = `
+      <button class="back" data-back data-to="#/countries">← 国家索引</button>
+      <header class="personhead">
+        <div class="role">COUNTRY / REGION</div>
+        <h1>${esc(c.name)}</h1>
+        <div class="personstats">
+          <div><b>${fmtNum(c.count || films.length)}</b><span>收录作品</span></div>
+          <div><b>${avg ? avg.toFixed(1) : '—'}</b><span>平均评分</span></div>
+          <div><b>${dirs.length}</b><span>代表导演</span></div>
+        </div>
+      </header>
+      ${dirs.length ? `<section class="section">${sectionHead('代表导演', '', '#/people', '导演索引')}<div class="entity-grid">${dirs.map(([d, n]) => `<a class="entity" href="${personHref(d)}"><b>${esc(d)}</b><span>${n} 部</span></a>`).join('')}</div></section>` : ''}
+      <section class="section">
+        ${sectionHead('综合高分', `前 ${top.length} 部`, '#/search?country=' + encodeURIComponent(c.code), '看全部')}
+        <div class="poster-grid">${top.map(([k], i) => filmCard(k, { rank: i + 1 })).join('')}</div>
+      </section>
+    `;
+  };
+
+  const renderPeopleIndex = params => {
+    const role = params.get('role') === 'actor' ? 'actor' : 'director';
+    const roleCount = p => role === 'actor' ? (p.acted || []).length : (p.directed || []).length;
+    const list = Object.values(P)
+      .filter(p => roleCount(p))
+      .sort((a, b) => roleCount(b) - roleCount(a) || (b.avg || 0) - (a.avg || 0))
+      .slice(0, 300);
+    app.innerHTML = `
+      <header class="searchhead">
+        <div class="kicker">PEOPLE</div>
+        <h1>${role === 'actor' ? '演员索引' : '导演索引'}</h1>
+        <div class="listtabs" style="border:0;padding:0">
+          <a class="chip ${role === 'director' ? 'on' : ''}" href="#/people">导演</a>
+          <a class="chip ${role === 'actor' ? 'on' : ''}" href="#/people?role=actor">演员</a>
+        </div>
+      </header>
+      <section class="section">
+        ${sectionHead(role === 'actor' ? '出演最多' : '作品最多', `显示前 ${list.length} 位`, '', '')}
+        <div class="entity-grid">
+          ${list.map(p => `<a class="entity" href="${personHref(p.name)}"><b>${esc(p.name)}</b><span>${roleCount(p)} 部<em>${p.avg ? p.avg.toFixed(1) : '—'}</em></span></a>`).join('')}
+        </div>
+      </section>
+    `;
+  };
+
+  const renderGenresIndex = () => {
+    const list = Object.values(G).sort((a, b) => b.count - a.count);
+    app.innerHTML = `
+      <header class="searchhead"><div class="kicker">GENRES</div><h1>类型索引</h1></header>
+      <section class="section">
+        <div class="entity-grid">
+          ${list.map(g => `<a class="entity" href="#/genre/${g.id}"><b>${esc(g.name)}</b><span>${g.count} 部<em>${g.avg ? g.avg.toFixed(1) : '—'}</em></span></a>`).join('')}
+        </div>
+      </section>
+    `;
+  };
+
+  const renderCountriesIndex = () => {
+    const list = Object.values(C).sort((a, b) => b.count - a.count);
+    app.innerHTML = `
+      <header class="searchhead"><div class="kicker">COUNTRIES</div><h1>国家 / 地区索引</h1></header>
+      <section class="section">
+        <div class="entity-grid">
+          ${list.map(c => `<a class="entity" href="#/country/${encodeURIComponent(c.code)}"><b>${esc(c.name)}</b><span>${c.count} 部<em>${c.avg ? c.avg.toFixed(1) : '—'}</em></span></a>`).join('')}
+        </div>
+      </section>
+    `;
+  };
+
+  /* ---------- search ---------- */
+  const buildHay = () => {
+    Object.entries(F).forEach(([, f]) => {
+      f._h = [
+        f.t, f.o, f.year,
+        ...(f.directors || []),
+        ...(f.cast || []).map(c => c.n),
+        ...(f.genres || []).map(genreName),
+        ...(f.countries || []).map(countryName),
+        ...(f.companies || [])
+      ].join(' ').toLowerCase();
+    });
+  };
+
+  const searchHref = (q, params) => {
+    const p = new URLSearchParams(params || {});
+    if (q) p.set('q', q); else p.delete('q');
+    const s = p.toString();
+    return '#/search' + (s ? '?' + s : '');
+  };
+
+  const renderSearch = params => {
+    const q = (params.get('q') || '').trim();
+    const decade = params.get('decade') || '';
+    const country = params.get('country') || '';
+    const genre = params.get('genre') || '';
+    const min = Number(params.get('min') || 0);
+    const cnOnly = params.get('cn') === '1';
+    const sort = params.get('sort') || 'hot';
+    const ql = q.toLowerCase();
+    const hasQuery = !!(ql || decade || country || genre || min || cnOnly);
+
+    let films = Object.entries(F).filter(([, f]) => {
+      if (decade && Math.floor((f.year || 0) / 10) * 10 !== Number(decade)) return false;
+      if (country && !(f.countries || []).includes(country)) return false;
+      if (genre && !(f.genres || []).includes(Number(genre))) return false;
+      if (min && ratingOf(f) < min) return false;
+      if (cnOnly && !isChinese(f)) return false;
+      if (ql && !(f._h || '').includes(ql)) return false;
+      return true;
+    });
+    const total = films.length;
+    if (sort === 'year') films.sort((a, b) => (b[1].year || 0) - (a[1].year || 0));
+    else if (sort === 'votes') films.sort((a, b) => votesOf(b[1]) - votesOf(a[1]));
+    else if (sort === 'title') films.sort((a, b) => String(titleOf(a[1])).localeCompare(String(titleOf(b[1])), 'zh'));
+    else if (sort === 'rating') films.sort((a, b) => ratingOf(b[1]) - ratingOf(a[1]) || votesOf(b[1]) - votesOf(a[1]));
+    else films.sort((a, b) => weighted(b[1]) - weighted(a[1]));
+    const shown = films.slice(0, 60);
+
+    const people = ql ? Object.values(P).filter(p => p.name.toLowerCase().includes(ql)).slice(0, 12) : [];
+    const genreHits = ql ? Object.values(G).filter(g => g.name.toLowerCase().includes(ql)).slice(0, 8) : [];
+    const countryHits = ql ? Object.values(C).filter(c => c.name.toLowerCase().includes(ql)).slice(0, 8) : [];
+    const topGenres = Object.values(G).sort((a, b) => b.count - a.count).slice(0, 12);
+    const topCountries = Object.values(C).sort((a, b) => b.count - a.count).slice(0, 12);
+    const topFilms = Object.entries(F).sort((a, b) => weighted(b[1]) - weighted(a[1])).slice(0, 12);
+
+    const sel = (name, value, options) => `<select data-filter="${name}">${options.map(([v, l]) => `<option value="${v}" ${String(v) === String(value) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+    const decades = [...new Set(Object.keys(Y).map(y => Math.floor(Number(y) / 10) * 10))].sort((a, b) => a - b);
+    const topCountryOpts = Object.values(C).sort((a, b) => b.count - a.count).slice(0, 30).map(c => [c.code, c.name]);
+    const countryOpts = [['', '全部国家'], ...(country && !topCountryOpts.some(([v]) => v === country) ? [[country, C[country]?.name || country]] : []), ...topCountryOpts];
+    const genreOpts = [['', '全部类型'], ...Object.values(G).sort((a, b) => b.count - a.count).map(g => [g.id, g.name])];
+
+    app.innerHTML = `
+      <header class="searchhead">
+        <div class="kicker">SEARCH / DATABASE</div>
+        <h1>${ql ? `搜索：${esc(q)}` : '搜片、搜人、搜类型'}</h1>
+        <form class="searchbig" id="heroSearch">
+          <input name="q" value="${esc(q)}" placeholder="片名、导演、演员、年份、类型…" autocomplete="off">
+          <button type="submit">搜索</button>
+        </form>
+        <div class="filters">
+          ${sel('decade', decade, [['', '全部年代'], ...decades.map(d => [d, d + 's'])])}
+          ${sel('country', country, countryOpts)}
+          ${sel('genre', genre, genreOpts)}
+          ${sel('min', min || '', [['', '不限评分'], ['7', '7 分以上'], ['8', '8 分以上'], ['9', '9 分以上']])}
+          <label><input type="checkbox" data-filter="cn" ${cnOnly ? 'checked' : ''}>只看华语</label>
+          ${sel('sort', sort, [['hot', '按综合'], ['rating', '按评分'], ['year', '按年份'], ['votes', '按票数'], ['title', '按片名']])}
+        </div>
+        <div class="resultmeta">${hasQuery ? `${total} 部影片${people.length ? ` · ${people.length} 位影人` : ''}` : '输入关键词，或者从下面的入口开始'}</div>
+      </header>
+
+      ${!hasQuery ? `
+        <section class="section">${sectionHead('热门类型', '', '#/genres', '全部类型')}<div class="chips">${topGenres.map(g => `<a class="chip" href="#/genre/${g.id}">${esc(g.name)}<small>${fmtNum(g.count)}</small></a>`).join('')}</div></section>
+        <section class="section">${sectionHead('热门国家', '', '#/countries', '全部国家')}<div class="chips">${topCountries.map(c => `<a class="chip" href="#/country/${encodeURIComponent(c.code)}">${esc(c.name)}<small>${fmtNum(c.count)}</small></a>`).join('')}</div></section>
+        <section class="section">${sectionHead('高分片', '先随便看看', '', '')}<div class="poster-grid">${topFilms.map(([k]) => filmCard(k)).join('')}</div></section>
+      ` : ''}
+
+      ${ql && (people.length || genreHits.length || countryHits.length) ? `<section class="section">
+        ${sectionHead('相关影人 / 分类', '', '', '')}
+        <div class="entity-grid">
+          ${people.map(p => `<a class="entity" href="${personHref(p.name)}"><b>${esc(p.name)}</b><span>${p.count} 部<em>${p.avg ? p.avg.toFixed(1) : '—'}</em></span></a>`).join('')}
+          ${genreHits.map(g => `<a class="entity" href="#/genre/${g.id}"><b>${esc(g.name)}</b><span>类型<em>${g.count}</em></span></a>`).join('')}
+          ${countryHits.map(c => `<a class="entity" href="#/country/${encodeURIComponent(c.code)}"><b>${esc(c.name)}</b><span>国家<em>${c.count}</em></span></a>`).join('')}
+        </div>
+      </section>` : ''}
+
+      ${hasQuery ? (shown.length ? `<section class="section">
+        ${sectionHead('影片', total > shown.length ? `显示前 ${shown.length} / ${total}` : `${total} 部`, '', '')}
+        <div class="poster-grid">${shown.map(([k], i) => filmCard(k, { rank: (sort === 'hot' || sort === 'rating') ? i + 1 : 0 })).join('')}</div>
+      </section>` : `<div class="empty">没有符合条件的影片。换个片名、导演或者放宽筛选试试。</div>`) : ''}
+    `;
+  };
+
+  /* ---------- all time ---------- */
+  const renderAll = params => {
+    const era = params.get('era') || '';
+    const eras = ['全部', '1890s', '1900s', '1910s', '1920s', '1930s', '1940s', '1950s', '1960s', '1970s', '1980s', '1990s', '2000s', '2010s', '2020s'];
+    const range = era && era !== '全部' ? [Number(era.slice(0, 4)), Number(era.slice(0, 4)) + 9] : null;
+    const filtered = ALL.map((k, i) => [k, i + 1, F[k]]).filter(([, , f]) => f && (!range || (f.year >= range[0] && f.year <= range[1])));
+    const total = filtered.length;
+    const limit = Math.min(Number(params.get('n') || 60) || 60, total);
+    const list = filtered.slice(0, limit);
+    const moreHref = '#/all?' + (era && era !== '全部' ? 'era=' + encodeURIComponent(era) + '&' : '') + 'n=' + Math.min(total, limit + 60);
+    app.innerHTML = `
+      <header class="searchhead">
+        <div class="kicker">ALL TIME · TOP 10%</div>
+        <h1>影史前 10%</h1>
+        <p style="color:var(--muted);font-size:13px;max-width:720px;margin:0 0 16px">从 ${Number(STATS.top30 || 0).toLocaleString()} 部年度 Top 30 里，筛出票数 ≥ 5 万的 ${fmtNum(STATS.qualified || 0)} 部，再按评分取前 ${ALL.length} 部。同分看票数。</p>
+        <div class="chips">${eras.map(e => `<a class="chip ${e === (era || '全部') ? 'on' : ''}" href="${e === '全部' ? '#/all' : '#/all?era=' + e}">${e}</a>`).join('')}</div>
+      </header>
+      <section class="section">
+        <div class="poster-grid">${list.map(([k, rank]) => filmCard(k, { rank })).join('')}</div>
+        ${total > list.length ? `<div style="text-align:center;padding:30px 0"><a class="chip" href="${moreHref}">显示更多（${list.length} / ${total}）</a></div>` : ''}
+      </section>
+    `;
+  };
+
+  /* ---------- my list ---------- */
+  const renderList = params => {
+    const tab = params.get('tab') || 'all';
+    const my = getMy();
+    let entries = Object.entries(my).map(([k, v]) => [k, F[k], v]).filter(x => x[1]);
+    if (tab !== 'all') entries = entries.filter(([, , v]) => v.status === tab);
+    entries.sort((a, b) => (b[2].at || 0) - (a[2].at || 0));
+    app.innerHTML = `
+      <header class="searchhead">
+        <div class="kicker">MY LIST</div>
+        <h1>我的片单</h1>
+        <div class="listtabs" style="border:0;padding:0">
+          <a class="chip ${tab === 'all' ? 'on' : ''}" href="#/list">全部 ${Object.keys(my).length}</a>
+          <a class="chip ${tab === 'watched' ? 'on' : ''}" href="#/list?tab=watched">看过</a>
+          <a class="chip ${tab === 'want' ? 'on' : ''}" href="#/list?tab=want">想看</a>
+        </div>
+      </header>
+      <div class="listtools">
+        <button data-export>导出 CSV</button>
+        <button data-clear>清空</button>
+      </div>
+      ${entries.length ? `<div class="ranklist">
+        ${entries.map(([k, f, v]) => `<div class="listrow">
+          <a class="t" href="${filmHref(k)}">${esc(titleOf(f))}<small>${f.year || ''}</small></a>
+          <span class="s">${myStatusLabel(v.status)}</span>
+          <span class="u">${v.rating ? '★'.repeat(v.rating) : '—'}</span>
+          <span><button data-remove data-key="${esc(k)}">移除</button></span>
+        </div>`).join('')}
+      </div>` : `<div class="empty">还没有标记。打开任意一部片，点「看过」或「想看」。</div>`}
+    `;
+  };
+
+  /* ---------- about ---------- */
+  const renderAbout = () => {
+    app.innerHTML = `
+      <header class="searchhead"><div class="kicker">ABOUT</div><h1>数据说明</h1></header>
+      <section class="section prose" style="border:0">
+        <h2>年度榜</h2>
+        <p>每年 30 部来自 IMDb 官方每日数据集，按评分排序、同分看票数。票数门槛按年代从 100 递增到 20,000；1930 年后只收电影，1930 年前含短片。共 ${Number(STATS.top30 || 0).toLocaleString()} 部。</p>
+        <h2>影史前 10%</h2>
+        <p>从 ${Number(STATS.top30 || 0).toLocaleString()} 部年度 Top 30 里，筛出票数 ≥ 5 万的 ${fmtNum(STATS.qualified || 0)} 部，再按评分取前 ${ALL.length} 部。同分看票数。</p>
+        <h2>华语片</h2>
+        <p>来自 TMDB 的 <code>with_original_language=zh</code>（普通话 + 粤语），按年取票数最高的 60 部，再按评分排序取前 20；票数门槛 30。冷门片可能缺席。</p>
+        <h2>影片资料</h2>
+        <p>简介、类型、片长、上映日期、主演、制片公司、系列来自 TMDB；中文译名优先用 TMDB <code>zh-CN</code>，其次 IMDb <code>title.akas</code> 的 CN/TW/HK 标题。精选层保留人工译名。</p>
+        <h2>缺什么</h2>
+        <p>在 ${fmtNum(STATS.films || Object.keys(F).length)} 部影片里，约 ${fmtNum(STATS.noChinese || 0)} 部没有中文片名，基本是早期默片、印度/土耳其地方片。部分 Top 30 影片只有基础资料，没有主演和片长；精选与华语片优先补全。</p>
+        <h2>离线版</h2>
+        <p>线上版是完整的数据库；离线版是单个 HTML 文件，双击即可打开。海报不会加载，其余数据与线上版一致。地址：<a href="offline.html" style="color:var(--gold)">offline.html</a>。</p>
+        <h2>数据更新</h2>
+        <p>${esc(DATA.generatedAt || '')}</p>
+      </section>
+    `;
+  };
+
+  /* ---------- router ---------- */
+  const route = () => {
+    const { parts, params } = parseHash();
+    closeNav();
+    setActive(parts);
+
+    if (parts[0] === 'search') {
+      $('#searchInput').value = params.get('q') || '';
+    } else {
+      $('#searchInput').value = '';
+    }
+
+    if (!parts.length) renderHome();
+    else if (/^\d{4}$/.test(parts[0])) location.replace('#/year/' + parts[0]);
+    else if (parts[0] === 'year' && /^\d{4}$/.test(parts[1] || '')) renderYear(parts[1]);
+    else if (parts[0] === 'film' && parts[1]) renderFilm(parts[1]);
+    else if (parts[0] === 'person' && parts[1]) renderPerson(parts[1]);
+    else if (parts[0] === 'genre' && parts[1]) renderGenre(parts[1]);
+    else if (parts[0] === 'country' && parts[1]) renderCountry(parts[1]);
+    else if (parts[0] === 'people') renderPeopleIndex(params);
+    else if (parts[0] === 'genres') renderGenresIndex();
+    else if (parts[0] === 'countries') renderCountriesIndex();
+    else if (parts[0] === 'search') renderSearch(params);
+    else if (parts[0] === 'all') renderAll(params);
+    else if (parts[0] === 'list') renderList(params);
+    else if (parts[0] === 'about') renderAbout();
+    else app.innerHTML = notfound();
+
+    window.scrollTo(0, 0);
+  };
+
+  /* ---------- header / events ---------- */
+  const closeNav = () => $('#nav')?.classList.remove('open');
+  $('#menuBtn').addEventListener('click', () => $('#nav').classList.toggle('open'));
+  $('#nav').addEventListener('click', e => { if (e.target.closest('a')) closeNav(); });
+  $('#searchForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const q = $('#searchInput').value.trim();
+    location.hash = '#/search' + (q ? '?q=' + encodeURIComponent(q) : '');
+  });
+
+  document.addEventListener('submit', e => {
+    if (e.target.id === 'heroSearch') {
+      e.preventDefault();
+      const q = e.target.querySelector('input')?.value.trim() || '';
+      location.hash = '#/search' + (q ? '?q=' + encodeURIComponent(q) : '');
+    }
+  });
+
+  document.addEventListener('change', e => {
+    const el = e.target.closest('[data-filter]');
+    if (!el) return;
+    const { params } = parseHash();
+    const p = new URLSearchParams(params);
+    const name = el.dataset.filter;
+    if (el.type === 'checkbox') {
+      if (el.checked) p.set(name, '1'); else p.delete(name);
+    } else {
+      if (el.value) p.set(name, el.value); else p.delete(name);
+    }
+    location.hash = '#/search' + (p.toString() ? '?' + p.toString() : '');
+  });
+
+  document.addEventListener('click', e => {
+    const back = e.target.closest('[data-back]');
+    if (back) { location.hash = back.dataset.to || '#/'; return; }
+
+    const go = e.target.closest('[data-go]');
+    if (go) { location.hash = '#/year/' + go.dataset.go; return; }
+
+    const my = e.target.closest('[data-my]');
+    if (my) {
+      const key = my.dataset.key;
+      setMy(key, { status: my.dataset.my });
+      const group = my.parentElement;
+      group.querySelectorAll('[data-my]').forEach(b => b.classList.toggle('on', b.dataset.my === my.dataset.my));
+      toast(my.dataset.my === 'watched' ? '已标记看过' : '已加入想看');
+      return;
+    }
+
+    const star = e.target.closest('[data-star]');
+    if (star) {
+      const key = star.dataset.key;
+      const n = Number(star.dataset.star);
+      setMy(key, { rating: n });
+      const group = star.parentElement;
+      [...group.querySelectorAll('[data-star]')].forEach(b => b.classList.toggle('on', Number(b.dataset.star) <= n));
+      toast(`已打 ${n} 星`);
+      if (parseHash().parts[0] === 'list') route();
+      return;
+    }
+
+    const remove = e.target.closest('[data-remove]');
+    if (remove) {
+      delMy(remove.dataset.key);
+      route();
+      return;
+    }
+
+    const clear = e.target.closest('[data-clear]');
+    if (clear) {
+      if (confirm('清空整个片单？这个操作不能撤销。')) {
+        localStorage.removeItem(LS_KEY);
+        route();
+      }
+      return;
+    }
+
+    const exp = e.target.closest('[data-export]');
+    if (exp) {
+      const my = getMy();
+      const rows = [['title', 'original', 'year', 'status', 'myRating']];
+      Object.entries(my).forEach(([k, v]) => {
+        const f = F[k];
+        if (!f) return;
+        rows.push([titleOf(f), f.o || '', f.year || '', myStatusLabel(v.status), v.rating || '']);
+      });
+      const csv = rows.map(r => r.map(x => `"${String(x).replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = '我的电影年鉴.csv';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      return;
+    }
+  });
+
+  buildHay();
+  window.addEventListener('hashchange', route);
+  route();
+})();

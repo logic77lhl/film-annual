@@ -1,108 +1,109 @@
 # 电影年鉴 1895—2026
 
-一个电影元数据库式的年鉴：132 年，每年精选、补看、华语片 Top 20、IMDb 年度 Top 30，外加影史前 10%。可按影片、导演、演员、类型、国家浏览。
+一个可以按年份、影片、导演、类型、国家浏览的静态电影年鉴：132 年，每年精选、补看、华语片 Top 20、IMDb 年度 Top 30，外加影史前 10%。
 
-- 线上版：https://logic77lhl.github.io/film-annual/
-- 仓库：https://github.com/logic77lhl/film-annual
+[在线版](https://logic77lhl.github.io/film-annual/) · [离线单文件版](https://logic77lhl.github.io/film-annual/offline.html) · [设计说明](docs/DESIGN.md) · [数据说明](docs/DATA.md) · [维护说明](docs/MAINTAINER.md)
 
-## 两种版本
+![电影年鉴首页](docs/screenshot.png)
 
-| 文件 | 用途 |
-| --- | --- |
-| `dist/index.html` | 线上完整版，数据在 `dist/data/films.json` |
-| `dist/offline.html` | 离线单文件版，数据内联，双击即可打开；海报不加载 |
+## 这是什么
 
-线上版和离线版共用 `app.html`、`app.css`、`app.js`。构建时把 CSS/JS 内联，离线版再把 JSON 数据内联。
+这是一个纯静态网站，没有后端、没有登录、没有推荐算法。所有页面由一份 JSON 数据驱动，打开即用；也可以下载单个 HTML 文件离线阅读。
+
+适合：
+
+- 想按年份快速翻片单的人
+- 想按导演、演员、类型、国家找片的人
+- 想拿一份现成电影数据集做二次开发的人
+
+不适合：
+
+- 需要实时票房、流媒体片源或用户评论的人
+- 需要商业级推荐系统的人
+
+## 能做什么
+
+- 132 年，4,880 部影片；每年精选 + 补看 + 华语 20 + Top 30
+- 影史前 10%，支持按年代筛选
+- 影片、导演、演员、类型、国家互相跳转
+- 搜索片名、原名、导演、演员、年份、类型、国家
+- 我的片单：看过 / 想看、星级、CSV 导出，保存在浏览器本地
+- 离线单文件版，双击即可打开
+- 深色桌面 / 移动端布局
+
+## 快速开始
+
+需要 Node.js 20 或更高版本。
+
+```bash
+npm run build
+npm run serve
+```
+
+打开 `http://localhost:8080`。
+
+`npm run build` 会用仓库里的数据缓存重新生成 `data/films.json`，再生成 `dist/`。不需要联网，也不需要 TMDB key。
+
+如果只想改页面：
+
+```bash
+npm run build:site
+npm run serve
+```
+
+## 目录
+
+```text
+app/                 前端页面
+  index.html         页面壳
+  app.css            样式
+  app.js             路由、渲染、搜索、片单
+data/                数据和抓取缓存
+  curated.json       人工精选、补看、点评
+  top30.json         IMDb 年度 Top 30
+  cn-films.json      华语片年度榜
+  cn-titles.json     中文片名
+  tmdb-*.json        TMDB 缓存
+  films.json         合并后的完整数据
+scripts/             数据与构建脚本
+docs/                设计、数据、维护文档
+dist/                构建产物（不提交）
+.github/workflows/   部署 workflow
+```
 
 ## 数据规模
 
+截至 2026-10-27：
+
 - 4,880 部影片
 - 3,960 部 IMDb 年度 Top 30（132 年 × 30）
-- 846 部华语片年度榜（65 个年份，每年最多 20 部）
+- 846 部华语片年度榜（65 个年份）
 - 513 部人工精选 + 231 部补看
 - 396 部影史前 10%
-- 1,559 部有 TMDB 完整资料：简介、片长、类型、国家、公司、系列、导演、主演
-- 2,438 位影人：776 位导演、1,798 位演员（至少两部作品）
+- 1,559 部有完整 TMDB 资料
+- 2,438 位影人：776 位导演、1,798 位演员
 - 49 个国家/地区、19 个类型
 
-4,880 部里有 722 部暂无中文片名，基本是早期默片、印度/土耳其地方片。部分 Top 30 影片只有基础资料，没有主演和片长；精选与华语片优先补全。
+## 数据来源
 
-## 文件
+- **IMDb 每日数据集**：年度 Top 30、影史榜、评分、票数
+- **TMDB**：华语片年度榜、中文简介、片长、类型、国家、公司、系列、导演、主演
+- **人工精选**：`data/curated.json`，包括精选、补看、年代关键词和短评
 
-### 应用
-
-- `app.html` — 页面壳
-- `app.css` — 样式
-- `app.js` — 路由、渲染、搜索、筛选、片单、CSV 导出
-- `data/films.json` — 合并后的完整数据（构建产物）
-- `build-v2-data.js` — 把榜单、精选、TMDB 缓存合并成 `data/films.json`
-- `build-v2.js` — 生成 `dist/index.html`、`dist/offline.html`、`dist/data/films.json`
-- `deploy-v2.js` — 通过 GitHub Git Trees API 发布 `dist/` + README
-- `deploy.ps1` — `deploy-v2.js` 的 PowerShell 包装
-
-### 数据与缓存
-
-- `top30.json` — IMDb 年度 Top 30、影史前 10%
-- `cn-films.json` — 华语片年度榜（TMDB）
-- `cn-titles.json` — IMDb akas + TMDB 中文片名
-- `curated.json` — 人工精选、补看、年代关键词与短评
-- `curated-map.json` — 精选/补看与 Top 30、华语榜的匹配结果
-- `curated-search.json` — 未匹配影片的 TMDB 搜索结果
-- `tmdb-find2.json` — 3,960 个 IMDb ID 的 TMDB `/find` 缓存
-- `tmdb-details.json` — 1,559 部影片的 TMDB 详情缓存
-
-## 构建
-
-```powershell
-# 1. 合并数据（需要上面的缓存文件）
-node build-v2-data.js
-
-# 2. 生成线上版 + 离线版
-node build-v2.js
-
-# 3. 发布
-node deploy-v2.js
-```
-
-`data/films.json` 约 5.3 MB，`dist/offline.html` 约 5.3 MB。GitHub Pages 会自动 gzip 文本，线上首次加载通常在 1–2 MB 量级。
-
-## 数据与算法
-
-- **年度 Top 30**：IMDb 官方每日数据集（`title.basics` + `title.ratings` + `title.akas`）。电影 + 短片（1930 年后只收电影），票数门槛按年代从 100 递增到 20,000；按评分排序，同分看票数。
-- **影史前 10%**：从 3,960 部里筛出票数 ≥ 5 万的 1,183 部，再按评分取前 396 部。
-- **华语片**：TMDB `with_original_language=zh|cn`（普通话 + 粤语），按年取票数最高的 60 部，再按评分排序取前 20，票数门槛 30。
-- **完整资料**：TMDB `/movie/{id}?append_to_response=credits&language=zh-CN`，包括中文简介、片长、类型、制片国家、公司、系列、导演、前 8 位主演。
-- **中文片名**：精选层人工译名 → TMDB `zh-CN` → IMDb `title.akas` 的 CN/TW/HK 标题。
-- **排序**：搜索、类型页、国家页、相关推荐默认用「评分 × log10(票数)」的综合分，避免只有几十票的冷门片压过经典；也可切换为纯评分、年份、票数、片名。
-
-## 环境变量
-
-TMDB 需要 v3 key，只从环境变量读取：
-
-```powershell
-[Environment]::SetEnvironmentVariable("TMDB_KEY", "你的 v3 key", "User")
-```
-
-脚本不会把 key 写进 `data/films.json`、`dist/` 或提交记录。
-
-`api.themoviedb.org` 在部分网络会被 DNS 污染，所有请求统一走 `https://api.tmdb.org`。
-
-## 发布说明
-
-`github.com` 的 git 连接在当前网络不可用，发布走 `api.github.com`：
-
-- `deploy-v2.js` 读取 `gh auth token`（不打印）
-- 创建 5 个 blob：`index.html`、`offline.html`、`data/films.json`、`.nojekyll`、`README.md`
-- 用 Git Trees API 生成新 tree 和 commit，再更新 `main`
-- 不依赖本地 `dist/.git`，远端仓库是唯一发布源
-- 仓库只发布 `dist/` 产物和 README；构建缓存保留在本地
-
-提交后约 1 分钟，GitHub Pages 自动发布。
+具体口径、字段和构建顺序见 [数据说明](docs/DATA.md)。
 
 ## 已知限制
 
 - 2026 年尚未结束，年度榜与华语榜会继续补。
-- IMDb 没有「制片国家」字段；国家/地区、片长、主演等来自 TMDB，冷门片可能缺失。
-- 全部影片里 722 部没有中文片名；部分 Top 30 影片没有简介和主演。
-- 离线版不加载海报；线上版海报来自 `image.tmdb.org`，失败时自动切到 `wsrv.nl` 代理。
+- 4,880 部里有 722 部暂无中文片名，主要是早期默片和冷门地方片。
+- IMDb 没有制片国家字段；国家、片长、主演等来自 TMDB，冷门片可能缺失。
+- 离线版不加载海报；线上版海报失败时会切到 `wsrv.nl` 代理。
 - 评分与票数为公开数据，仅供参考，不构成观看建议。
+
+## 授权
+
+- 代码：MIT，见 [LICENSE](LICENSE)
+- 原创文字与点评：CC BY-NC 4.0
+- IMDb / TMDB 数据与海报：归各自权利方，使用需遵守其条款
+
+完整说明见 [NOTICE.md](NOTICE.md)。
